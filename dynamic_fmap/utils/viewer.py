@@ -124,9 +124,9 @@ class Viewer:
 
         # o3d.visualization.draw_geometries([obs_cloud, fmap_cloud])
 
-    def update(self, obs_cloud, point_forces):
-        if obs_cloud != None:
-            self.update_observed_pointcloud(obs_cloud)
+    def update(self, obs, point_forces):
+        if obs != None and 'pointcoud' in obs:
+            self.update_observed_pointcloud(obs)
         self.update_fmap(point_forces)
         self.set_camera_pose()
         self._vis.poll_events()

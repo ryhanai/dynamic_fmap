@@ -111,6 +111,9 @@ class ForceObservation:
                 }
         """
 
+        if not self.uid in self._sensors:
+            self._sensors[self.uid] = ForceCamera(force_camera_config=ForceCameraConfig(self.uid), env=self)
+
         sensor_obs = super()._get_obs_sensor_data(apply_texture_transforms=apply_texture_transforms)
         for name, sensor in self.scene.sensors.items():
             if isinstance(sensor, ForceCamera):
@@ -119,11 +122,9 @@ class ForceObservation:
         return sensor_obs
 
 
-@register_env("PickCube-v1f", max_episode_steps=50)
+@register_env("PickCube-v1", max_episode_steps=50)
 class PickCubeEnv(ForceObservation, pick_cube.PickCubeEnv):
-    def __init__(self, *args, **kwargs):        
-        super().__init__(*args, **kwargs)        
-        self._sensors[self.uid] = ForceCamera(force_camera_config=ForceCameraConfig(self.uid), env=self)
+    pass
 
 
 class Replayer:
@@ -134,7 +135,7 @@ class Replayer:
         self._args = replay_trajectory.Args(
             traj_path=traj_path,
             sim_backend='cpu',
-            obs_mode='rgb+pointcloud',
+            obs_mode='rgb+depth',
             target_control_mode=None,
             verbose=False,
             save_traj=False,

@@ -1,4 +1,5 @@
 from pathlib import Path
+import dynamic_fmap.benchmarks.maniskill
 from dynamic_fmap.benchmarks.maniskill import Replayer
 
 
@@ -13,8 +14,8 @@ if __name__ == '__main__':
     replayer = Replayer()
 
     traj_path = str(demo_root / traj_files[0])
-    env_id = traj_path.split('/')[-3]
+    env_id = traj_path.split('/')[-3] + 'f'
     print(f'ENV_ID={env_id}')
 
-    replayer.replay(traj_path, annotation=['force', 'rgb'])
+    replayer.replay(traj_path)
 
