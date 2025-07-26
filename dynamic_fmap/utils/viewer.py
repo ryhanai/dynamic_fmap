@@ -1,13 +1,7 @@
-from functools import reduce
-import transforms3d as tf
-import re
 import numpy as np
-
 import open3d as o3d
 from scipy.stats import multivariate_normal
 import matplotlib.pyplot as plt
-
-import sapien
 
 
 # カメラ位置（eye）と注視点（lookat）を指定して extrinsic を自前で計算
@@ -25,12 +19,9 @@ def get_extrinsic_look_at(eye, lookat, up):
     return extrinsic
 
 
-class FmapUtils:
-    def __init__(self, env):
-        self._env = env    
-        self._index = 0
-
-        # Visualizer の作成
+class Viewer:
+    def __init__(self):
+        # Create visualizer
         self._vis = o3d.visualization.Visualizer()
         self._vis.create_window(window_name="Force Map")
 
@@ -40,8 +31,8 @@ class FmapUtils:
         self._vis.add_geometry(self._fmap_pcd)
 
         self.set_camera_pose()
-        self._vis.poll_events()      # イベント処理
-        self._vis.update_renderer()  # 描画更新
+        self._vis.poll_events()
+        self._vis.update_renderer()
 
     def set_camera_pose(self,
                         lookat=np.array([0.0, 0.0, 0.0]),  # 注視点
@@ -55,46 +46,7 @@ class FmapUtils:
         param.extrinsic = get_extrinsic_look_at(eye, lookat, up)
         ctr.convert_from_pinhole_camera_parameters(param)        
 
-    def get_contact_force(self):
-        dt = 1 / self._env.base_env.sim_config.sim_freq
-
-        def get_point_forces(c):
-            return [(p.position, p.impulse / dt, p.normal) for p in c.points]
-
-        cs = self._env.base_env.scene.get_contacts()
-        return reduce(lambda x, y: x + y, [get_point_forces(c) for c in cs])
-
-    def add_force_vector(self, pose=([0, 0.4, 0.3], [1, 0, 0, 0]), half_length=0.3, index=0, color=[0, 0, 1]):
-        builder = self._env.base_env.scene.create_actor_builder()
-        p = sapien.Pose(*pose)
-        builder.set_initial_pose(p)
-        builder.add_cylinder_visual(radius=0.005, half_length=half_length, material=color)
-        name = f'force_vector{index}'
-        c = builder.build_static(name=name)
-        # c.set_pose(p)
-
-    def draw_point_forces(self, point_forces, scale=0.02):
-        # remove existing force vectors
-        for actor in self._env.base_env.scene.get_all_actors():
-            if re.match('.*force_vector.*', actor.name) != None:
-                actor.remove_from_scene()
-
-        for position, force, normal in point_forces:
-            force_mag = np.linalg.norm(force)
-            if force_mag < 1e-5:
-                continue
-
-            # print(force)
-            force_direction = force / force_mag
-            xaxis = np.array([1, 0, 0])
-            rotvec = np.cross(xaxis, force_direction)
-            axis = rotvec / np.linalg.norm(rotvec)
-            angle = np.arccos(np.dot(xaxis, force_direction))
-            quat = tf.quaternions.mat2quat(tf.axangles.axangle2mat(axis, angle))
-            self.add_force_vector(pose=[position, quat], half_length=scale*force_mag, index=self._index)
-            self._index += 1
-
-    def update_fmap_cloud(self, point_forces):
+    def update_fmap(self, point_forces):
         cov = np.diag([0.0001, 0.0001, 0.0001])
         min_draw = 1500.
 
@@ -172,38 +124,13 @@ class FmapUtils:
 
         # o3d.visualization.draw_geometries([obs_cloud, fmap_cloud])
 
-    def update(self, obs):
-        point_forces = self.get_contact_force()
-        self.draw_point_forces(point_forces)
-
-        if obs != None:
-            self.update_observed_pointcloud(obs)
-        self.update_fmap_cloud(point_forces)
-
+    def update(self, obs_cloud, point_forces):
+        if obs_cloud != None:
+            self.update_observed_pointcloud(obs_cloud)
+        self.update_fmap(point_forces)
         self.set_camera_pose()
         self._vis.poll_events()
         self._vis.update_renderer()
 
     def __del__(self):
         self._vis.destroy_window()
-
-
-# Available tasks
-# PushCube-v1
-# PickCube-v1
-# PullCube-v1  too slow (rl)
-# StackCube-v1
-# PokeCube-v1  too slow (rl)
-# PlugCharger-v1
-# PushT-v1  too slow (rl)
-# LiftPegUpright-v1 too slow (rl)
-# PullCubeTool-v1
-# PegInsertionSide-v1
-# RollBall-v1  too slow (rl)
-# DrawTriangle-v1 => ERROR
-# TwoRobotPickCube-v1
-# TwoRobotStackCube-v1
-# AnymalC-Reach-v1             
-
-               
-    

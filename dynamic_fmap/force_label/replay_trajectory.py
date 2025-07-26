@@ -29,7 +29,7 @@ from mani_skill.utils import common, io_utils, wrappers
 from mani_skill.utils.logging_utils import logger
 from mani_skill.utils.wrappers.record import RecordEpisode
 
-from dynamic_fmap.force_label.fmap_utils import FmapUtils
+from dynamic_fmap.utils.fmap_utils import FmapUtils
 
 
 @dataclass
@@ -408,7 +408,6 @@ def _main(
     json_data = io_utils.load_json(json_path)
 
     print(f'ENV_KWARGS: {env_kwargs}')
-    env_kwargs['obs_mode'] = 'pointcloud'
 
     env = gym.make(env_id, **env_kwargs)
     # TODO (support adding wrappers to the recorded data?)
