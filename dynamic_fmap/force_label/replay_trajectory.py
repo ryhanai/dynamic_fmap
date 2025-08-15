@@ -20,7 +20,7 @@ import torch
 import tyro
 from tqdm import tqdm
 
-import mani_skill.envs
+# import mani_skill.envs
 from mani_skill.envs.utils.system.backend import CPU_SIM_BACKENDS
 from mani_skill.trajectory import utils as trajectory_utils
 from mani_skill.trajectory.merge_trajectory import merge_trajectories
@@ -29,6 +29,7 @@ from mani_skill.utils import common, io_utils, wrappers
 from mani_skill.utils.logging_utils import logger
 from mani_skill.utils.wrappers.record import RecordEpisode
 
+import dynamic_fmap.benchmarks.maniskill
 from dynamic_fmap.utils.fmap_utils import FmapUtils
 
 
@@ -252,7 +253,8 @@ def replay_parallelized_sim(
 def replay_cpu_sim(
     args: Args, env: RecordEpisode, ori_env, pbar, episodes, trajectories
 ):
-    fmap_utils = FmapUtils(env)
+    global global_env
+    # fmap_utils = FmapUtils(env)
     successful_replays = 0
     for episode in episodes:
         sanity_check_and_format_seed(episode)
@@ -287,15 +289,21 @@ def replay_cpu_sim(
                     # since we set state earlier and RecordEpisode will save the reset to state.
                     def recursive_replace(x, y):
                         if isinstance(x, np.ndarray):
+                            print(f'DIMS={x.shape}, {y.shape}')
+                            print(f'{x}, {y}')
                             x[-1, :] = y[-1, :]
                         else:
                             for k in x.keys():
+                                print(f'KEY={k}')
                                 recursive_replace(x[k], y[k])
 
                     recursive_replace(
                         env._trajectory_buffer.state, common.batch(ori_env_states[0])
                     )
+
+                    global_env = env
                     fixed_obs = env.base_env.get_obs()
+                    print(f'FIXED_OBS: {fixed_obs}')
                     recursive_replace(
                         env._trajectory_buffer.observation,
                         common.to_numpy(common.batch(fixed_obs)),
@@ -324,8 +332,8 @@ def replay_cpu_sim(
                     if pbar is not None:
                         pbar.update()
                     _, _, _, truncated, info = env.step(a)
-                    #fmap_utils.update(None)
-                    fmap_utils.update(env.base_env.get_obs())                    
+                    # fmap_utils.update(None)
+                    # fmap_utils.update(env.base_env.get_obs())                    
 
                     if args.use_env_states:
                         env.base_env.set_state_dict(ori_env_states[t])
@@ -406,7 +414,7 @@ def _main(
     # Load associated json
     json_path = traj_path.replace(".h5", ".json")
     json_data = io_utils.load_json(json_path)
-
+    
     print(f'ENV_KWARGS: {env_kwargs}')
 
     env = gym.make(env_id, **env_kwargs)
@@ -488,6 +496,7 @@ def main(args: Args):
 
     env_info = json_data["env_info"]
     env_id = env_info["env_id"]
+
     ori_env_kwargs = env_info["env_kwargs"]
     env_kwargs = ori_env_kwargs.copy()
 

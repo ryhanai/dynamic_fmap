@@ -1,3 +1,4 @@
+# from typing import override
 import numpy as np
 from functools import reduce
 # import transforms3d as tf
@@ -7,7 +8,7 @@ from mani_skill.utils.registration import register_env
 from mani_skill.sensors.camera import CameraConfig
 from mani_skill.sensors.base_sensor import BaseSensor
 from mani_skill.utils import sapien_utils
-from mani_skill.envs import pick_cube
+from mani_skill.envs import *
 from mani_skill.envs.sapien_env import BaseEnv
 
 
@@ -54,15 +55,23 @@ class ForceCamera(BaseSensor):
     def capture(self):
         dt = 1 / self._env.sim_config.sim_freq
 
-        def get_point_forces(c):
-            return [{'position': p.position, 'force': p.impulse / dt, 'normal': p.normal} for p in c.points]
+        def get_point_forces(c, flattened=True):
+            if flattened:
+                return [np.concatenate([p.position, p.impulse / dt, p.normal], axis=0) for p in c.points]
+            else:
+                return [{'position': p.position, 'force': p.impulse / dt, 'normal': p.normal} for p in c.points]
 
         cs = self._env.scene.get_contacts()
         if len(cs) > 0:
-            self._latest_values = reduce(lambda x, y: x + y, [get_point_forces(c) for c in cs])        
+            # self._latest_values = np.concatenate([get_point_forces(c) for c in cs])
+            self._latest_values = reduce(lambda x, y: x + y, [get_point_forces(c) for c in cs])
         else:
-            self._latest_values = []
+            # It seems that tensor with no element has issue in replay code of maniskill
+            self._latest_values = [np.array([0, 0, 0, 0, 0, 0, 0, 0, 1.])]
 
+        print(f'Point Forces = {self._latest_values}')
+        # It seems that tensors of different sizes cannot be saved by RecordWrapper !!
+    
     def get_obs(self):
         sensor_dict = {}
         sensor_dict['point_forces'] = self._latest_values
@@ -82,10 +91,14 @@ class ForceObservation:
 
     @property
     def _default_sensor_configs(self):
-        pose = sapien_utils.look_at(
-            eye=self.sensor_cam_eye_pos, target=self.sensor_cam_target_pos
-        )
-        return [CameraConfig("base_camera", pose, 256, 256, np.pi / 2, 0.01, 100)]
+        return []
+
+    # @property
+    # def _default_sensor_configs(self):
+    #     pose = sapien_utils.look_at(
+    #         eye=self.sensor_cam_eye_pos, target=self.sensor_cam_target_pos
+    #     )
+    #     return [CameraConfig("base_camera", pose, 256, 256, np.pi / 2, 0.01, 100)]
 
     def _get_obs_sensor_data(self, apply_texture_transforms: bool = True) -> dict:
         """
@@ -122,8 +135,17 @@ class ForceObservation:
         return sensor_obs
 
 
-@register_env("PickCube-v1", max_episode_steps=50)
-class PickCubeEnv(ForceObservation, pick_cube.PickCubeEnv):
+# Override the already registered environments
+@register_env("PickCube-v1", max_episode_steps=50, override=True)
+class PickCubeEnv(ForceObservation, PickCubeEnv):
+    pass
+
+@register_env("PushT-v1", max_episode_steps=50, override=True)
+class PushTEnv(ForceObservation, PushTEnv):
+    pass
+
+@register_env("PokeCube-v1", max_episode_steps=50, override=True)
+class PokeCubeEnv(ForceObservation, PokeCubeEnv):
     pass
 
 
@@ -138,7 +160,7 @@ class Replayer:
             obs_mode='rgb+depth',
             target_control_mode=None,
             verbose=False,
-            save_traj=False,
+            save_traj=True,
             save_video=False,
             max_retry=0,
             discard_timeout=False,
@@ -146,7 +168,7 @@ class Replayer:
             vis=True,
             use_env_states=True,
             use_first_env_state=False, 
-            count=None,
+            count=1,  # None by default
             reward_mode=None,
             record_rewards=False,
             shader=None, 
