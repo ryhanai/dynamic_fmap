@@ -1,13 +1,10 @@
-# from typing import override
+from typing import Union
 import numpy as np
-from functools import reduce
 # import transforms3d as tf
 from dataclasses import dataclass
 from dynamic_fmap.force_label import replay_trajectory
 from mani_skill.utils.registration import register_env
-from mani_skill.sensors.camera import CameraConfig
 from mani_skill.sensors.base_sensor import BaseSensor
-from mani_skill.utils import sapien_utils
 from mani_skill.envs import *
 from mani_skill.envs.sapien_env import BaseEnv
 
@@ -62,14 +59,17 @@ class ForceCamera(BaseSensor):
                 return [{'position': p.position, 'force': p.impulse / dt, 'normal': p.normal} for p in c.points]
 
         cs = self._env.scene.get_contacts()
+
         if len(cs) > 0:
-            # self._latest_values = np.concatenate([get_point_forces(c) for c in cs])
-            self._latest_values = reduce(lambda x, y: x + y, [get_point_forces(c) for c in cs])
+            self._latest_values = np.concatenate([get_point_forces(c, flattened=True) for c in cs])
+            # self._latest_values = {}
+            # for i, c in enumerate(cs):
+            #     self._latest_values[f'contact_{i}'] = get_point_forces(c)
         else:
             # It seems that tensor with no element has issue in replay code of maniskill
-            self._latest_values = [np.array([0, 0, 0, 0, 0, 0, 0, 0, 1.])]
+            self._latest_values = np.array([[0, 0, 0, 0, 0, 0, 0, 0, 1.]])
+            # self._latest_values = {}
 
-        print(f'Point Forces = {self._latest_values}')
         # It seems that tensors of different sizes cannot be saved by RecordWrapper !!
     
     def get_obs(self):
@@ -91,14 +91,15 @@ class ForceObservation:
 
     @property
     def _default_sensor_configs(self):
-        return []
+        return super()._default_sensor_configs
+
 
     # @property
     # def _default_sensor_configs(self):
     #     pose = sapien_utils.look_at(
     #         eye=self.sensor_cam_eye_pos, target=self.sensor_cam_target_pos
     #     )
-    #     return [CameraConfig("base_camera", pose, 256, 256, np.pi / 2, 0.01, 100)]
+    #     return [CameraConfig("force_camera", pose, 128, 128, np.pi / 2, 0.01, 100)]
 
     def _get_obs_sensor_data(self, apply_texture_transforms: bool = True) -> dict:
         """
@@ -131,6 +132,7 @@ class ForceObservation:
         for name, sensor in self.scene.sensors.items():
             if isinstance(sensor, ForceCamera):
                 sensor_obs[name] = sensor.get_obs()
+                # print(f'sensor_obs[{name}] = {sensor_obs[name]}')
 
         return sensor_obs
 
@@ -153,22 +155,22 @@ class Replayer:
     def __init__(self):
         pass
         
-    def replay(self, traj_path: str, annotation=[]):
+    def replay(self, traj_path: str, count: Union[int, None] = None, annotation=[]):
         self._args = replay_trajectory.Args(
             traj_path=traj_path,
             sim_backend='cpu',
-            obs_mode='rgb+depth',
+            obs_mode='rgb', # 'rgb+depth',
             target_control_mode=None,
             verbose=False,
             save_traj=True,
-            save_video=False,
+            save_video=True,
             max_retry=0,
             discard_timeout=False,
             allow_failure=False,
             vis=True,
             use_env_states=True,
             use_first_env_state=False, 
-            count=1,  # None by default
+            count=count,  # None by default
             reward_mode=None,
             record_rewards=False,
             shader=None, 

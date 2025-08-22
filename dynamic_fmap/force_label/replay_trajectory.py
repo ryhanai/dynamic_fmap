@@ -289,12 +289,12 @@ def replay_cpu_sim(
                     # since we set state earlier and RecordEpisode will save the reset to state.
                     def recursive_replace(x, y):
                         if isinstance(x, np.ndarray):
-                            print(f'DIMS={x.shape}, {y.shape}')
-                            print(f'{x}, {y}')
+                            # print(f'DIMS={x.shape}, {y.shape}')
+                            # print(f'{x}, {y}')
                             x[-1, :] = y[-1, :]
                         else:
                             for k in x.keys():
-                                print(f'KEY={k}')
+                                # print(f'KEY={k}')
                                 recursive_replace(x[k], y[k])
 
                     recursive_replace(
@@ -303,7 +303,7 @@ def replay_cpu_sim(
 
                     global_env = env
                     fixed_obs = env.base_env.get_obs()
-                    print(f'FIXED_OBS: {fixed_obs}')
+                    # print(f'FIXED_OBS: {fixed_obs}')
                     recursive_replace(
                         env._trajectory_buffer.observation,
                         common.to_numpy(common.batch(fixed_obs)),
