@@ -20,7 +20,6 @@ import torch
 import tyro
 from tqdm import tqdm
 
-# import mani_skill.envs
 from mani_skill.envs.utils.system.backend import CPU_SIM_BACKENDS
 from mani_skill.trajectory import utils as trajectory_utils
 from mani_skill.trajectory.merge_trajectory import merge_trajectories
@@ -28,9 +27,6 @@ from mani_skill.trajectory.utils.actions import conversion as action_conversion
 from mani_skill.utils import common, io_utils, wrappers
 from mani_skill.utils.logging_utils import logger
 from mani_skill.utils.wrappers.record import RecordEpisode
-
-import dynamic_fmap.benchmarks.maniskill
-from dynamic_fmap.utils.fmap_utils import FmapUtils
 
 
 @dataclass
@@ -87,6 +83,7 @@ class Args:
     """Number of environments to run to replay trajectories. With CPU backends typically this is parallelized via python multiprocessing.
     For parallelized simulation backends like physx_gpu, this is parallelized within a single python process by leveraging the GPU."""
 
+    visualize_existing_annotation: bool = False
 
 @dataclass
 class ReplayResult:
@@ -250,6 +247,9 @@ def replay_parallelized_sim(
     )
 
 
+from dynamic_fmap.utils.viewer import Viewer
+fmap_viewer = Viewer()
+
 def replay_cpu_sim(
     args: Args, env: RecordEpisode, ori_env, pbar, episodes, trajectories
 ):
@@ -292,6 +292,8 @@ def replay_cpu_sim(
                             # print(f'DIMS={x.shape}, {y.shape}')
                             # print(f'{x}, {y}')
                             x[-1, :] = y[-1, :]
+                        elif isinstance(x, list):  # R.Hanai
+                            x = y.copy()
                         else:
                             for k in x.keys():
                                 # print(f'KEY={k}')
@@ -331,7 +333,9 @@ def replay_cpu_sim(
                 for t, a in enumerate(ori_actions):
                     if pbar is not None:
                         pbar.update()
-                    _, _, _, truncated, info = env.step(a)
+                    obs, reward, terminated, truncated, info = env.step(a)
+                    
+                    fmap_viewer.update(obs)
                     # fmap_utils.update(None)
                     # fmap_utils.update(env.base_env.get_obs())                    
 

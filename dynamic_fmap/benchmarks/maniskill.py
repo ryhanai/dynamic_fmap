@@ -138,16 +138,56 @@ class ForceObservation:
 
 
 # Override the already registered environments
+@register_env("DrawTriangle-v1", max_episode_steps=50, override=True)
+class DrawTriangleEnv(ForceObservation, DrawTriangleEnv):
+    pass
+
+@register_env("LiftPegUpright-v1", max_episode_steps=50, override=True)
+class LiftPegUprightEnv(ForceObservation, LiftPegUprightEnv):
+    pass
+
+@register_env("PegInsertionSide-v1", max_episode_steps=50, override=True)
+class PegInsertionSideEnv(ForceObservation, PegInsertionSideEnv):
+    pass
+
 @register_env("PickCube-v1", max_episode_steps=50, override=True)
 class PickCubeEnv(ForceObservation, PickCubeEnv):
+    pass
+
+@register_env("PlugCharger-v1", max_episode_steps=50, override=True)
+class PlugChargerEnv(ForceObservation, PlugChargerEnv):
+    pass
+
+@register_env("PokeCube-v1", max_episode_steps=50, override=True)
+class PokeCubeEnv(ForceObservation, PokeCubeEnv):
+    pass
+
+@register_env("PullCube-v1", max_episode_steps=50, override=True)
+class PullCubeEnv(ForceObservation, PullCubeEnv):
+    pass
+
+@register_env("PushCube-v1", max_episode_steps=50, override=True)
+class PushCubeEnv(ForceObservation, PushCubeEnv):
     pass
 
 @register_env("PushT-v1", max_episode_steps=50, override=True)
 class PushTEnv(ForceObservation, PushTEnv):
     pass
 
-@register_env("PokeCube-v1", max_episode_steps=50, override=True)
-class PokeCubeEnv(ForceObservation, PokeCubeEnv):
+@register_env("RollBall-v1", max_episode_steps=50, override=True)
+class RollBallEnv(ForceObservation, RollBallEnv):
+    pass
+
+@register_env("StackCube-v1", max_episode_steps=50, override=True)
+class StackCubeEnv(ForceObservation, StackCubeEnv):
+    pass
+
+@register_env("TwoRobotPickCube-v1", max_episode_steps=50, override=True)
+class TwoRobotPickCube(ForceObservation, TwoRobotPickCube):
+    pass
+
+@register_env("TwoRobotStackCube-v1", max_episode_steps=50, override=True)
+class TwoRobotStackCube(ForceObservation, TwoRobotStackCube):
     pass
 
 
@@ -155,14 +195,19 @@ class Replayer:
     def __init__(self):
         pass
         
-    def replay(self, traj_path: str, count: Union[int, None] = None, annotation=[]):
+    def replay(self, 
+               traj_path: str, 
+               count: Union[int, None] = None, 
+               annotation=[],
+               visualize_existing_annotation=False,
+               ):
         self._args = replay_trajectory.Args(
             traj_path=traj_path,
             sim_backend='cpu',
-            obs_mode='rgb', # 'rgb+depth',
+            obs_mode='pointcloud', # 'rgb+depth',
             target_control_mode=None,
             verbose=False,
-            save_traj=True,
+            save_traj=False,
             save_video=True,
             max_retry=0,
             discard_timeout=False,
@@ -176,7 +221,8 @@ class Replayer:
             shader=None, 
             video_fps=None, 
             render_mode='rgb_array', 
-            num_envs=1
+            num_envs=1,
+            visualize_existing_annotation=False,
             )
 
         replay_trajectory.main(self._args)

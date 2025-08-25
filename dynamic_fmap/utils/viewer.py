@@ -46,16 +46,36 @@ class Viewer:
         param.extrinsic = get_extrinsic_look_at(eye, lookat, up)
         ctr.convert_from_pinhole_camera_parameters(param)        
 
-    def update_fmap(self, point_forces):
-        cov = np.diag([0.0001, 0.0001, 0.0001])
-        min_draw = 1500.
+    def update_fmap(self, point_forces, smoothing=True):
+        if smoothing:
+            self.update_pointcloud(self._fmap_pcd, *self.smooth_point_forces(point_forces))
+        else:
+            pts = []
+            col = []
+            for v in point_forces:
+                position = v[:3]
+                force = v[3:6]
+                normal = v[6:9]
+                force_mag = np.linalg.norm(force)
+                if force_mag < 1e-5:
+                    continue
 
+                pts.append(position)
+                #fmax = max(force_mag, 10.)
+                fmax = max(force_mag, 1.)
+                col.append(force / fmax)
+
+            self.update_pointcloud(self._fmap_pcd, pts, col)
+
+    def smooth_point_forces(self, 
+                            point_forces,
+                            cov = np.diag([0.0001, 0.0001, 0.0001]),
+                            min_draw = 1500.):
         # sample random points
         # num_points = 1000
         # points = np.random.multivariate_normal(mean, cov * 2, size=num_points)
 
-        # sample grid points
-        # 各軸の座標範囲
+        # sample grid points (各軸の座標範囲)
         x = np.linspace(-0.4, 0.4, 80)  # x方向に10点
         y = np.linspace(-0.4, 0.4, 80)  # y方向に10点
         z = np.linspace(0, 0.4, 40)  # z方向に10点
@@ -68,13 +88,16 @@ class Viewer:
 
         # ガウス密度を計算
         densities = np.zeros(points.shape[0])
-        for position, force, normal in point_forces:
+        for v in point_forces:
+            position = v[:3]
+            force = v[3:6]
+            normal = v[6:9]
             force_mag = np.linalg.norm(force)
             if force_mag < 1e-5:
                 continue
 
             rv = multivariate_normal(mean=position, cov=cov)
-            point_densities = rv.pdf(points)
+            point_densities = force_mag * rv.pdf(points)
             densities += point_densities
 
         # 表示する点を閾値でfiltering
@@ -83,51 +106,53 @@ class Viewer:
         densities = densities[indices]
 
         if len(densities) == 0:
-            return
+            return [], []
 
         print(np.max(densities), np.min(densities))
 
         # 4. 密度を[0,1]に正規化して、色（緑〜赤）に変換
         densities_normalized = (densities - densities.min()) / (densities.max() - densities.min())
         colors = plt.cm.get_cmap('RdYlGn_r')(densities_normalized)[:, :3]  # 赤(高密度)〜緑(低密度)    
-
-        self._fmap_pcd.points = o3d.utility.Vector3dVector(points)
-        self._fmap_pcd.colors = o3d.utility.Vector3dVector(colors)
-        self._vis.add_geometry(self._fmap_pcd)
+        return points, colors
 
     def update_observed_pointcloud(self, obs):
         pts = obs['pointcloud']['xyzw'][0, ..., :3].cpu().numpy()
         col = obs['pointcloud']['rgb'][0].cpu().numpy()
         col = col / 255.
-        pcd = o3d.geometry.PointCloud()
-        self._obs_pcd.points = o3d.utility.Vector3dVector(pts)
-        self._obs_pcd.colors = o3d.utility.Vector3dVector(col)
-        self._vis.add_geometry(self._obs_pcd)
+        self.update_pointcloud(self._obs_pcd, pts, col)
 
-    def draw_pointclouds(self, obs_cloud, fmap_cloud):
-        # 2. マテリアル設定（RGBA）
-        material = o3d.visualization.rendering.MaterialRecord()
-        material.shader = "defaultUnlit"
-        material.base_color = [1, 1, 1, 0.8]  # RGBA（A=0.3で半透明）
-        material.point_size = 4.0  # 点の大きさを調整
+    def update_pointcloud(self, pcd, points, colors):
+        pcd.points = o3d.utility.Vector3dVector(points)
+        pcd.colors = o3d.utility.Vector3dVector(colors)
+        self._vis.add_geometry(pcd)
 
-        material2 = o3d.visualization.rendering.MaterialRecord()
-        material2.shader = "defaultUnlit"
-        material2.base_color = [1, 1, 1, 0.2]
-        material2.point_size = 1.0
+    # def draw_pointclouds(self, obs_cloud, fmap_cloud):
+    #     """
+    #     not used now
+    #     """
+    #     # 2. マテリアル設定（RGBA）
+    #     material = o3d.visualization.rendering.MaterialRecord()
+    #     material.shader = "defaultUnlit"
+    #     material.base_color = [1, 1, 1, 0.8]  # RGBA（A=0.3で半透明）
+    #     material.point_size = 4.0  # 点の大きさを調整
 
-        # 3. 描画（新しいGUIで半透明対応）
-        o3d.visualization.draw([
-            {"name": "obs_cloud", "geometry": obs_cloud, "material": material},
-            {"name": "force_cloud", "geometry": fmap_cloud, "material": material2},
-            ])
+    #     material2 = o3d.visualization.rendering.MaterialRecord()
+    #     material2.shader = "defaultUnlit"
+    #     material2.base_color = [1, 1, 1, 0.2]
+    #     material2.point_size = 1.0
 
-        # o3d.visualization.draw_geometries([obs_cloud, fmap_cloud])
+    #     # 3. 描画（新しいGUIで半透明対応）
+    #     o3d.visualization.draw([
+    #         {"name": "obs_cloud", "geometry": obs_cloud, "material": material},
+    #         {"name": "force_cloud", "geometry": fmap_cloud, "material": material2},
+    #         ])
 
-    def update(self, obs, point_forces):
-        if obs != None and 'pointcoud' in obs:
+    #     o3d.visualization.draw_geometries([obs_cloud, fmap_cloud])
+
+    def update(self, obs):
+        if obs != None and 'pointcloud' in obs:
             self.update_observed_pointcloud(obs)
-        self.update_fmap(point_forces)
+        self.update_fmap(point_forces=obs['sensor_data']['force_camera']['point_forces'])
         self.set_camera_pose()
         self._vis.poll_events()
         self._vis.update_renderer()
