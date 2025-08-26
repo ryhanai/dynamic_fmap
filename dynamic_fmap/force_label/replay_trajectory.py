@@ -19,6 +19,8 @@ import numpy as np
 import torch
 import tyro
 from tqdm import tqdm
+from pathlib import Path
+from functools import reduce
 
 from mani_skill.envs.utils.system.backend import CPU_SIM_BACKENDS
 from mani_skill.trajectory import utils as trajectory_utils
@@ -84,6 +86,7 @@ class Args:
     For parallelized simulation backends like physx_gpu, this is parallelized within a single python process by leveraging the GPU."""
 
     visualize_existing_annotation: bool = False
+    output_dir: Optional[str] = None
 
 @dataclass
 class ReplayResult:
@@ -335,9 +338,7 @@ def replay_cpu_sim(
                         pbar.update()
                     obs, reward, terminated, truncated, info = env.step(a)
                     
-                    fmap_viewer.update(obs)
-                    # fmap_utils.update(None)
-                    # fmap_utils.update(env.base_env.get_obs())                    
+                    # fmap_viewer.update(obs)
 
                     if args.use_env_states:
                         env.base_env.set_state_dict(ori_env_states[t])
@@ -436,7 +437,13 @@ def _main(
 
     # note for maniskill trajectory datasets the general naming format is <trajectory_name>.<obs_mode>.<control_mode>.<sim_backend>.h5
     # If it is called <file_name>.h5 then we assume obs_mode=None, control_mode=pd_joint_pos, and sim_backend=physx_cpu
-    output_dir = os.path.dirname(traj_path)
+    if args.output_dir is None:
+        output_dir = os.path.dirname(traj_path)
+    else:
+        output_dir = str(reduce(lambda x, y: x / y,
+                                [Path(args.output_dir), *os.path.dirname(traj_path).split('/')[-2:]]
+                                ))
+
     ori_traj_name = os.path.splitext(os.path.basename(traj_path))[0]
     parts = ori_traj_name.split(".")
     if len(parts) > 1:

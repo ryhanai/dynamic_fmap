@@ -200,14 +200,15 @@ class Replayer:
                count: Union[int, None] = None, 
                annotation=[],
                visualize_existing_annotation=False,
+               output_dir: Union[str, None] = None,
                ):
         self._args = replay_trajectory.Args(
             traj_path=traj_path,
             sim_backend='cpu',
-            obs_mode='pointcloud', # 'rgb+depth',
+            obs_mode='rgb', # 'rgb+depth', 'pointcloud', 'rgb'
             target_control_mode=None,
             verbose=False,
-            save_traj=False,
+            save_traj=True,
             save_video=True,
             max_retry=0,
             discard_timeout=False,
@@ -223,6 +224,7 @@ class Replayer:
             render_mode='rgb_array', 
             num_envs=1,
             visualize_existing_annotation=False,
+            output_dir=output_dir,
             )
 
         replay_trajectory.main(self._args)
