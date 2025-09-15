@@ -1,14 +1,14 @@
 from typing import Union
 from pathlib import Path
 
-from matplotlib.pyplot import annotate
+# from matplotlib.pyplot import annotate
 from dynamic_fmap.benchmarks.maniskill import Replayer
 
 
 all_tasks = [
-    "DrawTriangle-v1",
+    # "DrawTriangle-v1",
     "LiftPegUpright-v1",
-    "PegInsertionSide-v1",
+    # "PegInsertionSide-v1", This worked in Aug.
     "PickCube-v1",
     "PlugCharger-v1",
     "PokeCube-v1",
@@ -18,12 +18,13 @@ all_tasks = [
     "PushT-v1",
     "RollBall-v1",
     "StackCube-v1",
-    # "TwoRobotPickCube-v1",
-    # "TwoRobotStackCube-v1",
+#    "TwoRobotPickCube-v1",
+#     "TwoRobotStackCube-v1",
 ]
 
 
-output_dir = Path('/home/ryo/Dataset/dynamic_forcemap/250826')
+# output_dir = Path('/home/ryo/Dataset/dynamic_forcemap/250826')
+output_dir = Path('/home/ryo/Downloads/250914')
 
 
 def get_task_demonstration_files(task_name: str,
