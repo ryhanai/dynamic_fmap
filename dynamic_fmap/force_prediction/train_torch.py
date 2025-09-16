@@ -1,0 +1,332 @@
+#
+# Copyright (c) 2023 Ryo Hanai
+#
+
+import argparse
+from ast import For
+import json
+import random
+from pathlib import Path
+import re
+import importlib
+import numpy as np
+
+from core.utils import print_info, print_error, set_logdir, check_args
+
+import torch
+import torch.nn as nn
+import torch.optim as optim
+from torch.utils.data import DataLoader
+from torch.utils.data.sampler import BatchSampler, RandomSampler
+# from torchinfo import summary
+
+from tqdm import tqdm
+import wandb
+
+from dynamic_fmap.dataset.ForcePredictionDataset import ForcePredictionDataset
+
+
+def set_seed_everywhere(seed):
+    torch.manual_seed(seed)
+    if torch.cuda.is_available():
+        torch.cuda.manual_seed_all(seed)
+    np.random.seed(seed)
+    random.seed(seed)
+
+
+class EarlyStopping:
+    def __init__(self, patience=5):
+        """
+        Early stops the training if validation loss doesn't improve after a given patience.
+        Args:
+            patience  (int):  Number of epochs with no improvement after which training will be stopped.
+        """
+        self.patience = patience
+        self.counter = 0
+        self.best_score = None
+        self.save_ckpt = False
+        self.stop_flag = False
+        self.val_loss_min = np.inf
+
+    def __call__(self, val_loss):
+        if np.isnan(val_loss) or np.isinf(val_loss):
+            raise RuntimeError("Invalid loss, terminating training")
+
+        score = -val_loss
+
+        if self.best_score is None:
+            self.save_ckpt = True
+            self.best_score = score
+        elif score < self.best_score:
+            self.save_ckpt = False
+            self.counter += 1
+            if self.counter >= self.patience:
+                self.stop_flag = True
+        else:
+            self.save_ckpt = True
+            self.best_score = score
+            self.counter = 0
+
+        return self.save_ckpt, self.stop_flag
+
+
+from geomloss import SamplesLoss
+
+class SinkhornLoss(nn.Module):
+    def __init__(self, p=2, blur=0.05):
+        super().__init__()
+        self._loss_fn = SamplesLoss("sinkhorn", p=2, blur=0.05)
+
+    def forward(self, y, y_hat):
+        print(f"HOGE: {y.shape}, {y_hat.shape}")
+        xyz = y[:,:,:3]
+        fx = y[:,:,3]
+        fy = y[:,:,4]
+        fz = y[:,:,5]
+        xyz_hat = y_hat[:,:,:3]
+        fx_hat = y_hat[:,:,3]
+        fy_hat = y_hat[:,:,4]
+        fz_hat = y_hat[:,:,5]
+
+        batch_loss = self._loss_fn(fx, xyz, fx_hat, xyz_hat) \
+            + self._loss_fn(fy, xyz, fy_hat, xyz_hat) \
+            + self._loss_fn(fz, xyz, fz_hat, xyz_hat)
+        return torch.sum(batch_loss)
+
+
+class Trainer:
+    """
+    Helper class to train convolutional neural network with datalodaer
+
+    Args:
+        traindata (np.array): list of np.array. First diemension should be time steps
+        model (torch.nn.Module): rnn model
+        optimizer (torch.optim): optimizer
+        device (str):
+    """
+
+    def __init__(self, model, optimizer, log_dir_path, loss="mse", device="cpu"):
+        self.device = device
+        self.optimizer = optimizer
+        self.model = model.to(self.device)
+        self._log_dir_path = log_dir_path
+        self._loss = loss
+
+    def gen_chkpt_path(self, tag):
+        return str(Path(self._log_dir_path) / f"{tag}.pth")
+
+    def save(self, epoch, loss, tag=None):
+        save_name = self.gen_chkpt_path(f'{epoch:05d}' if tag == None else 'best')
+        torch.save(
+            {
+                "epoch": epoch,
+                "model_state_dict": self.model.state_dict(),
+                # 'optimizer_state_dict': self.optimizer.state_dict(),
+                "train_loss": loss[0],
+                "test_loss": loss[1],
+            },
+            save_name,
+        )
+
+    def process_epoch(self, data, training=True):
+        if not training:
+            self.model.eval()
+
+        total_loss = 0.0
+
+        assert self._loss == "mse" or self._loss == "pcl", f"Unknown loss function: {self._loss}"
+
+        for n_batch, bi in enumerate(data):
+            if self._loss == "mse":
+                xi, yi = bi
+                xi = xi.to(self.device)
+                yi = yi.to(self.device)
+                yi_hat = self.model(xi)
+                loss = nn.MSELoss()(yi_hat, yi)
+                total_loss += loss.item()
+            elif self._loss == "pcl":
+                xi, yi, sdf = bi
+                xi = xi.to(self.device)
+                yi = yi.to(self.device)
+                sdf = sdf.to(self.device)
+                yi_hat = self.model(xi)
+                loss = PCLoss()(yi_hat, yi, sdf)
+                total_loss += loss.item()
+
+            if training:
+                self.optimizer.zero_grad(set_to_none=True)
+                loss.backward()
+                self.optimizer.step()
+
+        return total_loss / n_batch
+
+
+# GPU optimizes and accelerates the network calculations.
+torch.set_float32_matmul_precision("high")
+torch.backends.cudnn.benchmark = True
+
+
+# argument parser
+parser = argparse.ArgumentParser(description="Learning to predict force distribution")
+parser.add_argument("--dataset_path", type=str, default="~/Dataset/forcemap")
+parser.add_argument("--task_name", type=str, default="tabletop240125")
+parser.add_argument("--model", type=str)
+parser.add_argument("--epoch", type=int, default=1000)
+parser.add_argument("--batch_size", type=int, default=16)
+parser.add_argument("--seed", type=int, default=42)
+parser.add_argument("--lr", type=float, default=1e-3)
+parser.add_argument("--loss", type=str, default="mse")
+parser.add_argument("--optimizer", type=str, default="adamax")
+parser.add_argument("--log_dir", default="log/")
+parser.add_argument("--vmin", type=float, default=0.1)
+parser.add_argument("--vmax", type=float, default=0.9)
+parser.add_argument("--device", type=int, default=0)
+parser.add_argument("--tag", help="Tag name for snap/log sub directory")
+parser.add_argument("--method", help="geometry-aware | isotropic | sdf", type=str, default="geometry-aware")
+parser.add_argument("--sigma_f", type=float, default=0.03)
+parser.add_argument("--sigma_g", type=float, default=0.01)
+parser.add_argument("--pretrained_weights", help="use pre-trained weight", type=str, default="")
+args = parser.parse_args()
+
+# check args
+args = check_args(args)
+
+# set device id
+if args.device >= 0:
+    device = "cuda:{}".format(args.device)
+else:
+    device = "cpu"
+
+
+task_name=args.task_name
+
+# # load dataset
+# with open(Path(args.dataset_path) / task_name / "params.json", "r") as f:
+#     dataset_params = json.load(f)
+
+# data_loader = dataset_params["data loader"]
+# minmax = [args.vmin, args.vmax]
+
+# print_info(f"loading train data [{data_loader}]")
+# dataset_module = importlib.import_module('fmdev.TabletopForceMapData')
+# train_data = getattr(dataset_module, data_loader)("train", 
+#                                                   minmax, 
+#                                                   task_name=task_name, 
+#                                                   method=args.method,
+#                                                   sigma_f=args.sigma_f,
+#                                                   sigma_g=args.sigma_g,
+#                                                   load_sdf=args.loss == "pcl",
+#                                                   )
+
+train_data = ForcePredictionDataset(data_split='train')
+
+# print_info(f"loading validation data [{data_loader}]")
+# valid_data = getattr(dataset_module, data_loader)("validation", 
+#                                                   minmax, 
+#                                                   task_name=task_name, 
+#                                                   method=args.method,
+#                                                   sigma_f=args.sigma_f,
+#                                                   sigma_g=args.sigma_g,
+#                                                   load_sdf=args.loss == "pcl",
+#                                                   )
+
+valid_data = ForcePredictionDataset(data_split='test')
+
+train_sampler = BatchSampler(RandomSampler(train_data), batch_size=args.batch_size, drop_last=False)
+train_loader = DataLoader(train_data, batch_size=None, num_workers=8, pin_memory=True, sampler=train_sampler)
+valid_sampler = BatchSampler(RandomSampler(valid_data), batch_size=args.batch_size, drop_last=False)
+valid_loader = DataLoader(valid_data, batch_size=None, num_workers=8, pin_memory=True, sampler=valid_sampler)
+
+
+set_seed_everywhere(args.seed)
+
+# mod_name = re.sub('\\.[^.]+$', '', args.model)
+# model_module = importlib.import_module(mod_name)
+# model_class_name = re.sub('[^.]*\\.', '', args.model)
+# model = getattr(model_module, model_class_name)(fine_tune_encoder=True, device=args.device)
+
+model = 
+
+if args.pretrained_weights != "":
+    print_error('loading pretrained weight is not supported yet')
+
+# set optimizer
+if args.optimizer.casefold() == "adam":
+    optimizer = optim.Adam(model.parameters(), lr=args.lr)
+elif args.optimizer.casefold() == "radam":
+    optimizer = optim.RAdam(model.parameters(), lr=args.lr)
+elif args.optimizer.casefold() == "adamax":
+    optimizer = optim.RAdam(model.parameters(), lr=args.lr, eps=1e-4)
+else:
+    assert False, "Unknown optimizer name {}. please set Adam or RAdam or Adamax.".format(args.optimizer)
+
+
+# log_dir_path = set_logdir("./" + args.log_dir, args.tag)
+# trainer = Trainer(model, optimizer, log_dir_path=log_dir_path, loss=args.loss, device=device)
+# early_stop = EarlyStopping(patience=100000)
+
+
+def do_train():
+    config = args.__dict__
+    config['dataset_class'] = type(valid_data)
+
+    if model_class_name == 'ForceEstimationV5':
+        model_tag = 'transformer'
+    elif re.match('.*ResNet.*', model_class_name) is not None:
+        model_tag = 'resnet'
+    
+    if config['method'] == 'isotropic':
+        group = f"IFS_f{config['sigma_f']:.3f}_{model_tag}"
+        name = f"IFS_f{config['sigma_f']:.3f}_{config['tag']}_{model_tag}"
+    if config['method'] == 'geometry-aware':
+        group = f"GAFS_f{config['sigma_f']:.3f}_g{config['sigma_g']:.3f}_{model_tag}"
+        name = f"GAFS_f{config['sigma_f']:.3f}_g{config['sigma_g']:.3f}_{config['tag']}_{model_tag}"
+    wandb.init(project="forcemap", group=group, name=name, config=config)
+
+    with tqdm(range(args.epoch)) as pbar_epoch:
+        for epoch in pbar_epoch:
+            train_loss = trainer.process_epoch(train_loader)
+            test_loss = trainer.process_epoch(valid_loader, training=False)
+
+            wandb.log({"Loss/train_loss": train_loss, "Loss/test_loss": test_loss})
+
+            # early stop
+            save_ckpt, stop_ckpt = early_stop(test_loss)
+
+            if save_ckpt:
+                trainer.save(epoch, [train_loss, test_loss], 'best')
+            else:
+                if epoch % 50 == 49:
+                    trainer.save(epoch, [train_loss, test_loss])
+
+            # print process bar
+            postfix = f"train_loss={train_loss:.5e}, test_loss={test_loss:.5e}"
+            pbar_epoch.set_postfix_str(postfix)
+
+    wandb.finish()
+
+
+# if __name__ == '__main__':
+#     do_train()
+
+
+
+# Voxel grid: B x D x H x W
+B, D, H, W = 1, 32, 32, 32
+voxels = torch.rand(B, D, H, W, requires_grad=True)
+
+# voxel size
+voxel_size = 0.1
+
+# voxel の座標 (center)
+z, y, x = torch.meshgrid(
+    torch.arange(D), torch.arange(H), torch.arange(W), indexing="ij"
+)
+coords = torch.stack([x, y, z], dim=-1).float() * voxel_size  # shape (D,H,W,3)
+
+# expand batch
+coords = coords.unsqueeze(0).expand(B, -1, -1, -1, -1)  # (B,D,H,W,3)
+
+# occupancy を point cloud にする（値を掛けて differentiable に）
+points = coords * voxels.unsqueeze(-1)  # (B,D,H,W,3)
+points = points.reshape(B, -1, 3)       # flatten: B x N x 3

@@ -6,7 +6,7 @@ from dynamic_fmap.benchmarks.maniskill import Replayer
 
 
 all_tasks = [
-    # "DrawTriangle-v1",
+    "DrawTriangle-v1",
     "LiftPegUpright-v1",
     # "PegInsertionSide-v1", This worked in Aug.
     "PickCube-v1",
