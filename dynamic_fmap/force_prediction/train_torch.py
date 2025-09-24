@@ -24,6 +24,13 @@ from tqdm import tqdm
 import wandb
 
 from dynamic_fmap.dataset.ForcePredictionDataset import ForcePredictionDataset
+from dynamic_fmap.model.force_prediction_resnet import ForcePredictionResNet
+from dynamic_fmap.model.losses import SinkhornLoss
+from dynamic_fmap.model.loss_L2_on_smoothed_grids import VoxelFieldL2Loss
+
+
+from fmdev.forcemap import GridForceMap
+fmap = GridForceMap('maniskill_table')
 
 
 def set_seed_everywhere(seed):
@@ -70,28 +77,6 @@ class EarlyStopping:
         return self.save_ckpt, self.stop_flag
 
 
-from geomloss import SamplesLoss
-
-class SinkhornLoss(nn.Module):
-    def __init__(self, p=2, blur=0.05):
-        super().__init__()
-        self._loss_fn = SamplesLoss("sinkhorn", p=2, blur=0.05)
-
-    def forward(self, y, y_hat):
-        print(f"HOGE: {y.shape}, {y_hat.shape}")
-        xyz = y[:,:,:3]
-        fx = y[:,:,3]
-        fy = y[:,:,4]
-        fz = y[:,:,5]
-        xyz_hat = y_hat[:,:,:3]
-        fx_hat = y_hat[:,:,3]
-        fy_hat = y_hat[:,:,4]
-        fz_hat = y_hat[:,:,5]
-
-        batch_loss = self._loss_fn(fx, xyz, fx_hat, xyz_hat) \
-            + self._loss_fn(fy, xyz, fy_hat, xyz_hat) \
-            + self._loss_fn(fz, xyz, fz_hat, xyz_hat)
-        return torch.sum(batch_loss)
 
 
 class Trainer:
@@ -105,7 +90,7 @@ class Trainer:
         device (str):
     """
 
-    def __init__(self, model, optimizer, log_dir_path, loss="mse", device="cpu"):
+    def __init__(self, model, optimizer, log_dir_path, loss, device="cpu"):
         self.device = device
         self.optimizer = optimizer
         self.model = model.to(self.device)
@@ -134,31 +119,38 @@ class Trainer:
 
         total_loss = 0.0
 
-        assert self._loss == "mse" or self._loss == "pcl", f"Unknown loss function: {self._loss}"
+        # assert self._loss == "mse" or self._loss == "pcl", f"Unknown loss function: {self._loss}"
 
         for n_batch, bi in enumerate(data):
-            if self._loss == "mse":
-                xi, yi = bi
-                xi = xi.to(self.device)
-                yi = yi.to(self.device)
-                yi_hat = self.model(xi)
-                loss = nn.MSELoss()(yi_hat, yi)
-                total_loss += loss.item()
-            elif self._loss == "pcl":
-                xi, yi, sdf = bi
-                xi = xi.to(self.device)
-                yi = yi.to(self.device)
-                sdf = sdf.to(self.device)
-                yi_hat = self.model(xi)
-                loss = PCLoss()(yi_hat, yi, sdf)
-                total_loss += loss.item()
+            # if self._loss == "mse":
+            #     xi, yi = bi
+            #     xi = xi.to(self.device)
+            #     yi = yi.to(self.device)
+            #     yi_hat = self.model(xi)
+            #     loss = nn.MSELoss()(yi_hat, yi)
+            #     total_loss += loss.item()
+            # elif self._loss == "pcl":
+            #     xi, yi, sdf = bi
+            #     xi = xi.to(self.device)
+            #     yi = yi.to(self.device)
+            #     sdf = sdf.to(self.device)
+            #     yi_hat = self.model(xi)
+            #     loss = PCLoss()(yi_hat, yi, sdf)
+            #     total_loss += loss.item()
+
+            xi, yi = bi
+            xi = xi.to(self.device)
+            yi = yi.to(self.device)
+            yi_hat = self.model(xi)
+            loss = self._loss(yi_hat, yi)
+            total_loss += loss.item()
 
             if training:
                 self.optimizer.zero_grad(set_to_none=True)
                 loss.backward()
                 self.optimizer.step()
 
-        return total_loss / n_batch
+        return total_loss / (n_batch+1)
 
 
 # GPU optimizes and accelerates the network calculations.
@@ -171,7 +163,7 @@ parser = argparse.ArgumentParser(description="Learning to predict force distribu
 parser.add_argument("--dataset_path", type=str, default="~/Dataset/forcemap")
 parser.add_argument("--task_name", type=str, default="tabletop240125")
 parser.add_argument("--model", type=str)
-parser.add_argument("--epoch", type=int, default=1000)
+parser.add_argument("--epoch", type=int, default=10000)
 parser.add_argument("--batch_size", type=int, default=16)
 parser.add_argument("--seed", type=int, default=42)
 parser.add_argument("--lr", type=float, default=1e-3)
@@ -245,7 +237,8 @@ set_seed_everywhere(args.seed)
 # model_class_name = re.sub('[^.]*\\.', '', args.model)
 # model = getattr(model_module, model_class_name)(fine_tune_encoder=True, device=args.device)
 
-model = 
+model = ForcePredictionResNet()
+model_class_name = "ForcePredictionResNet"
 
 if args.pretrained_weights != "":
     print_error('loading pretrained weight is not supported yet')
@@ -261,9 +254,16 @@ else:
     assert False, "Unknown optimizer name {}. please set Adam or RAdam or Adamax.".format(args.optimizer)
 
 
-# log_dir_path = set_logdir("./" + args.log_dir, args.tag)
-# trainer = Trainer(model, optimizer, log_dir_path=log_dir_path, loss=args.loss, device=device)
-# early_stop = EarlyStopping(patience=100000)
+voxel_centers = train_data._normalization(fmap.positions, (-0.3, 0.3))
+
+log_dir_path = set_logdir("./" + args.log_dir, args.tag)
+trainer = Trainer(model,
+                  optimizer,
+                  log_dir_path=log_dir_path,
+                  # loss=SinkhornLoss(voxel_centers=voxel_centers, batch_size=args.batch_size),
+                  loss=VoxelFieldL2Loss(voxel_centers=voxel_centers),                  
+                  device=device)
+early_stop = EarlyStopping(patience=100000)
 
 
 def do_train():
@@ -308,25 +308,3 @@ def do_train():
 
 # if __name__ == '__main__':
 #     do_train()
-
-
-
-# Voxel grid: B x D x H x W
-B, D, H, W = 1, 32, 32, 32
-voxels = torch.rand(B, D, H, W, requires_grad=True)
-
-# voxel size
-voxel_size = 0.1
-
-# voxel の座標 (center)
-z, y, x = torch.meshgrid(
-    torch.arange(D), torch.arange(H), torch.arange(W), indexing="ij"
-)
-coords = torch.stack([x, y, z], dim=-1).float() * voxel_size  # shape (D,H,W,3)
-
-# expand batch
-coords = coords.unsqueeze(0).expand(B, -1, -1, -1, -1)  # (B,D,H,W,3)
-
-# occupancy を point cloud にする（値を掛けて differentiable に）
-points = coords * voxels.unsqueeze(-1)  # (B,D,H,W,3)
-points = points.reshape(B, -1, 3)       # flatten: B x N x 3

@@ -6,7 +6,7 @@ from dynamic_fmap.benchmarks.maniskill import Replayer
 
 
 all_tasks = [
-    "DrawTriangle-v1",
+    # "DrawTriangle-v1",
     "LiftPegUpright-v1",
     # "PegInsertionSide-v1", This worked in Aug.
     "PickCube-v1",
@@ -24,7 +24,7 @@ all_tasks = [
 
 
 # output_dir = Path('/home/ryo/Dataset/dynamic_forcemap/250826')
-output_dir = Path('/home/ryo/Downloads/250914')
+output_dir = Path('/home/ryo/Downloads/250923')
 
 
 def get_task_demonstration_files(task_name: str,

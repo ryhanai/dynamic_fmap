@@ -19,7 +19,7 @@ train_tasks = [
 #    "PullCubeTool-v1",
     "PushCube-v1",
     "PushT-v1",
-    "RollBall-v1",
+#    "RollBall-v1",
 #    "TwoRobotPickCube-v1",
 #     "TwoRobotStackCube-v1",
 ]
@@ -68,7 +68,7 @@ class ForcePredictionDataset(Dataset):
         data_split,
         minmax=[0.1, 0.9],
         fminmax=[0.0, 100.0],
-        root_dir=Path.home() / 'Dataset' / 'dynamic_forcemap' / '250826',
+        root_dir=Path.home() / 'Dataset' / 'dynamic_forcemap' / '250923',
         dataset_name="250826",
         seed=42,
     ):
@@ -157,8 +157,16 @@ class ForcePredictionDataset(Dataset):
             fxyz = np.log(1. + fxyz)
             fxyz = self._normalization(fxyz, np.log(1. + self.fminmax))
 
+            if xyz.shape[0] <= 0:
+                # print(f'no point force in the defined forcemap, {demo_file}, {traj_number}')
+                xyz = np.array([[0.5, 0.5, 0.5]], dtype=np.float32)
+                fxyz = np.array([[0.1, 0.1, 0.1]], dtype=np.float32)
+
             normalized_pfs = np.concatenate([xyz, fxyz], axis=1)
             resampled_pfs = resample_point_cloud(normalized_pfs, n_points=32) # XYZRGB
+
+            assert resampled_pfs.shape == (32, 6), f"Unexpected shape [force]: {resampled_pfs.shape}, {demo_file}, {traj_number}"
+            assert rgb.shape == (3, 128, 128), f"Unexpected shape [rgb]: {rgb.shape}, {demo_file}, {traj_number}"
 
             return rgb, resampled_pfs
 
@@ -168,6 +176,8 @@ class ForcePredictionDataset(Dataset):
     def __getitem__(self, indices):
         imgs = []
         forces = []
+
+        # print(indices)
 
         for idx in indices:
             demo_file, traj_number, _ = self._episode_ids[idx]
