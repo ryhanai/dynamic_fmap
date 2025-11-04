@@ -252,15 +252,15 @@ def replay_parallelized_sim(
 
 # from dynamic_fmap.utils.viewer import Viewer
 # fmap_viewer = Viewer()
-from dynamic_fmap.samples.test_maniskill import ManiskillRVizViewer
+# from dynamic_fmap.samples.test_maniskill import ManiskillRVizViewer
 
 
 def replay_cpu_sim(
     args: Args, env: RecordEpisode, ori_env, pbar, episodes, trajectories
 ):
     global global_env
-    viewer = ManiskillRVizViewer(env)
-    viewer.load_robot()
+    # viewer = ManiskillRVizViewer(env)
+    # viewer.load_robot()
     successful_replays = 0
     for episode in episodes:
         sanity_check_and_format_seed(episode)
@@ -341,7 +341,7 @@ def replay_cpu_sim(
                         pbar.update()
                     obs, reward, terminated, truncated, info = env.step(a)
                     
-                    viewer.update()
+                    # viewer.update()
 
                     if args.use_env_states:
                         env.base_env.set_state_dict(ori_env_states[t])

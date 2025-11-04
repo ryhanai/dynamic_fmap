@@ -23,9 +23,11 @@ class ForceCamera(BaseSensor):
         self,
         force_camera_config: ForceCameraConfig,
         env: BaseEnv,
+        max_points: int = 4,  # 32
     ):
         super().__init__(config=force_camera_config)
         self._env = env
+        self._max_points = max_points
 
         # entity_uid = camera_config.entity_uid
         # if camera_config.mount is not None:
@@ -61,20 +63,36 @@ class ForceCamera(BaseSensor):
         cs = self._env.scene.get_contacts()
 
         if len(cs) > 0:
-            self._latest_values = np.concatenate([get_point_forces(c, flattened=True) for c in cs])
-            # self._latest_values = {}
-            # for i, c in enumerate(cs):
-            #     self._latest_values[f'contact_{i}'] = get_point_forces(c)
+            A = np.concatenate([get_point_forces(c, flattened=True) for c in cs])
         else:
-            # It seems that tensor with no element has issue in replay code of maniskill
-            self._latest_values = np.array([[0, 0, 0, 0, 0, 0, 0, 0, 1.]])
-            # self._latest_values = {}
+            A = np.array([[0, 0, 0, 0, 0, 0, 0, 0, 1.]])
 
-        # It seems that tensors of different sizes cannot be saved by RecordWrapper !!
+        # select the fixed number of point forces with largest magnitudes
+        n, d = A.shape
+        norms = np.linalg.norm(A[:, 3:6], axis=1)
+        top_idx = np.argsort(norms)[::-1][:min(self._max_points, n)]
+        A_top = A[top_idx]
+        if n < self._max_points:
+            pad = np.zeros((self._max_points - n, d))
+            A_top = np.vstack([A_top, pad])        
+
+        self._latest_values = A_top
+
+        # Remember the variable number of point forces
+        # if len(cs) > 0:
+        #     self._latest_values = np.concatenate([get_point_forces(c, flattened=True) for c in cs])
+        #     # self._latest_values = {}
+        #     # for i, c in enumerate(cs):
+        #     #     self._latest_values[f'contact_{i}'] = get_point_forces(c)
+        # else:
+        #     # It seems that tensor with no element has issue in replay code of maniskill
+        #     self._latest_values = np.array([[0, 0, 0, 0, 0, 0, 0, 0, 1.]])
+        #     # self._latest_values = {}
+
     
     def get_obs(self):
         sensor_dict = {}
-        sensor_dict['point_forces'] = self._latest_values
+        sensor_dict['point_forces'] = self._latest_values[np.newaxis, ...]
         return sensor_dict
 
     def get_params(self):
@@ -132,7 +150,6 @@ class ForceObservation:
         for name, sensor in self.scene.sensors.items():
             if isinstance(sensor, ForceCamera):
                 sensor_obs[name] = sensor.get_obs()
-                # print(f'sensor_obs[{name}] = {sensor_obs[name]}')
 
         return sensor_obs
 
@@ -205,7 +222,7 @@ class Replayer:
         self._args = replay_trajectory.Args(
             traj_path=traj_path,
             sim_backend='cpu',
-            obs_mode='rgb', # 'rgb+depth', 'pointcloud', 'rgb'
+            obs_mode='state+rgb', # 'rgb+depth', 'pointcloud', 'rgb', 'state+rgb+force'
             target_control_mode=None,
             verbose=False,
             save_traj=True,

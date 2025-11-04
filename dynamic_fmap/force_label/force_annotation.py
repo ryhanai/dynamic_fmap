@@ -6,21 +6,25 @@ from dynamic_fmap.benchmarks.maniskill import Replayer
 
 
 all_tasks = [
-    # "DrawTriangle-v1",
-    "LiftPegUpright-v1",
-    # "PegInsertionSide-v1", This worked in Aug.
     "PickCube-v1",
-    "PlugCharger-v1",
-    "PokeCube-v1",
-    "PullCube-v1",
-#    "PullCubeTool-v1",
-    "PushCube-v1",
-    "PushT-v1",
-    "RollBall-v1",
-    "StackCube-v1",
-#    "TwoRobotPickCube-v1",
-#     "TwoRobotStackCube-v1",
 ]
+
+# all_tasks = [
+#     # "DrawTriangle-v1",
+#     "LiftPegUpright-v1",
+#     # "PegInsertionSide-v1", This worked in Aug.
+#     "PickCube-v1",
+#     "PlugCharger-v1",
+#     "PokeCube-v1",
+#     "PullCube-v1",
+# #    "PullCubeTool-v1",
+#     "PushCube-v1",
+#     "PushT-v1",
+#     "RollBall-v1",
+#     "StackCube-v1",
+# #    "TwoRobotPickCube-v1",
+# #     "TwoRobotStackCube-v1",
+# ]
 
 
 # output_dir = Path('/home/ryo/Dataset/dynamic_forcemap/250826')
