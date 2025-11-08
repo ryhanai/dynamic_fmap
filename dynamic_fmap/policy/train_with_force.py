@@ -54,7 +54,6 @@ import sys
 from sympy import false
 sys.path.append('/home/ryo/Program/ManiSkill/examples/baselines/diffusion_policy')
 
-
 ALGO_NAME = "BC_Diffusion_rgbd_UNet"
 
 import os
@@ -78,7 +77,7 @@ from diffusers.optimization import get_scheduler
 from diffusers.schedulers.scheduling_ddpm import DDPMScheduler
 from diffusers.training_utils import EMAModel
 from gymnasium import spaces
-from mani_skill.utils.wrappers.flatten import FlattenRGBDObservationWrapper
+# from mani_skill.utils.wrappers.flatten import FlattenRGBDObservationWrapper
 from torch.utils.data.dataloader import DataLoader
 from torch.utils.data.dataset import Dataset
 from torch.utils.data.sampler import BatchSampler, RandomSampler
@@ -94,6 +93,10 @@ from diffusion_policy.utils import (IterationBasedBatchSampler,
                                     worker_init_fn)
 from dynamic_fmap.model.set_transformer import SmallSetTransformerEncoder
 import dynamic_fmap.benchmarks.maniskill
+import ipdb
+
+
+os.environ["CUDA_VISIBLE_DEVICES"] = "0"  # specify the GPU0 to suppress warnings
 
 
 @dataclass
@@ -188,9 +191,11 @@ def convert_obs(obs, concat_fn, transpose_fn, state_obs_extractor, depth = True)
     if depth:
         ls = ["rgb", "depth"]
 
+#    ipdb.set_trace()
+
     new_img_dict = {
         key: transpose_fn(
-            concat_fn([v[key] for v in img_dict.values()])
+            concat_fn([v[key] for v in img_dict.values() if key in v])
         )  # (C, H, W) or (B, C, H, W)
         for key in ls
     }
@@ -229,6 +234,63 @@ def convert_obs(obs, concat_fn, transpose_fn, state_obs_extractor, depth = True)
 
 def build_state_obs_extractor(env_id):
     return lambda obs: [obs["state"]]
+
+
+from typing import Dict
+from mani_skill.envs.sapien_env import BaseEnv
+from mani_skill.utils import common
+
+class FlattenRGBFObservationWrapper(gym.ObservationWrapper):
+    """
+    Flattens the rgb+force mode observations into a dictionary with three keys, "rgb", "point_forces" and "state"
+
+    Args:
+        rgb (bool): Whether to include rgb images in the observation
+        state (bool): Whether to include state data in the observation
+    """
+
+    def __init__(self, env, rgb=True, force=True, state=True) -> None:
+        self.base_env: BaseEnv = env.unwrapped
+        super().__init__(env)
+        self.include_rgb = rgb
+        self.include_force = force
+        self.include_state = state
+
+        # check if rgb/depth data exists in first camera's sensor data
+        first_cam = next(iter(self.base_env._init_raw_obs["sensor_data"].values()))
+        if "rgb" not in first_cam:
+            self.include_rgb = False
+        # Currently, point_forces is ot supported by base_env. Thus, we do not check its existence here.
+
+        new_obs = self.observation(self.base_env._init_raw_obs)
+        self.base_env.update_obs_space(new_obs)
+
+    def observation(self, observation: Dict):
+        sensor_data = observation.pop("sensor_data")
+        del observation["sensor_param"]
+        rgb_images = []
+        # depth_images = []
+        for cam_data in sensor_data.values():
+            if self.include_rgb:
+                if "rgb" in cam_data:
+                    rgb_images.append(cam_data["rgb"])
+
+        if len(rgb_images) > 0:
+            rgb_images = torch.concat(rgb_images, axis=-1)
+        # flatten the rest of the data which should just be state data
+        observation = common.flatten_state_dict(
+            observation, use_torch=True, device=self.base_env.device
+        )
+        ret = dict()
+        if self.include_state:
+            ret["state"] = observation
+        if self.include_rgb:
+            ret["rgb"] = rgb_images
+        if self.include_force:
+            if "force_camera" in sensor_data:
+                ret["point_forces"] = sensor_data["force_camera"]["point_forces"]
+        return ret
+
 
 
 class SmallDemoDataset_DiffusionPolicy(Dataset):  # Load everything into memory
@@ -444,11 +506,9 @@ class Agent(nn.Module):
         )
 
     def encode_obs(self, obs_seq, eval_mode):
-        batch_size = args.batch_size        
-
         if self.include_rgb:
-            rgb = obs_seq["rgb"].float() / 255.0  # (B, obs_horizon, 3*k, H, W)
-            img_seq = rgb
+            img_seq = obs_seq["rgb"].float() / 255.0  # (B, obs_horizon, 3*k, H, W)
+            batch_size = img_seq.shape[0]
             img_seq = img_seq.flatten(end_dim=1)  # (B*obs_horizon, C, H, W)
             if hasattr(self, "aug") and not eval_mode:
                 img_seq = self.aug(img_seq)  # (B*obs_horizon, C, H, W)
@@ -465,6 +525,7 @@ class Agent(nn.Module):
 
         if self.include_force:
             force = normalize_point_forces(obs_seq["point_forces"].float()) # (B, obs_horizon, F*k, 6)            
+            batch_size = force.shape[0]
             force = force.flatten(end_dim=1)
             x_pts = force[..., :3]  # (B, obs_horizon, F*k, 3)
             x_feats = force[..., 3:6]  # (B, obs_horizon, F*k, 3)
@@ -619,7 +680,7 @@ if __name__ == "__main__":
         env_kwargs,
         other_kwargs,
         video_dir=f"runs/{run_name}/videos" if args.capture_video else None,
-        wrappers=[FlattenRGBDObservationWrapper],
+        wrappers=[FlattenRGBFObservationWrapper],
     )
 
     if args.track:

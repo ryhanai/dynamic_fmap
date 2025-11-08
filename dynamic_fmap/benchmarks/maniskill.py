@@ -7,6 +7,7 @@ from mani_skill.utils.registration import register_env
 from mani_skill.sensors.base_sensor import BaseSensor
 from mani_skill.envs import *
 from mani_skill.envs.sapien_env import BaseEnv
+import torch
 
 
 @dataclass
@@ -76,7 +77,7 @@ class ForceCamera(BaseSensor):
             pad = np.zeros((self._max_points - n, d))
             A_top = np.vstack([A_top, pad])        
 
-        self._latest_values = A_top
+        self._latest_values = torch.from_numpy(A_top)
 
         # Remember the variable number of point forces
         # if len(cs) > 0:
