@@ -6,7 +6,8 @@ from dynamic_fmap.benchmarks.maniskill import Replayer
 
 
 all_tasks = [
-    "PickCube-v1",
+#     "PickCube-v1",
+     "StackCube-v1",
 ]
 
 # all_tasks = [
