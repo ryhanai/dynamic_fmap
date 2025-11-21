@@ -7,6 +7,7 @@ from mani_skill.utils.registration import register_env
 from mani_skill.sensors.base_sensor import BaseSensor
 from mani_skill.envs import *
 from mani_skill.envs.sapien_env import BaseEnv
+# from mani_skill.envs.scene import ManiSkillScene
 import torch
 
 
@@ -153,6 +154,35 @@ class ForceObservation:
                 sensor_obs[name] = sensor.get_obs()
 
         return sensor_obs
+
+
+# # Monkey-patch to skip the ForceCamera during GPU sensor setup
+# if not hasattr(ManiSkillScene, "_original_gpu_setup_sensors"):
+#     # 一度だけ元の実装を退避
+#     ManiSkillScene._original_gpu_setup_sensors = ManiSkillScene._gpu_setup_sensors
+
+#     def _gpu_setup_sensors_skip_force(self, sensors):
+#         """
+#         ManiSkillScene._gpu_setup_sensors のラッパ。
+#         sensors が dict の場合、ForceCamera を値に持つエントリだけ除外する。
+#         """
+
+#         # sensors は通常 {"cam0": Camera(...), "cam1": DepthCamera(...), ...} な dict
+#         if isinstance(sensors, dict):
+#             filtered_sensors = {
+#                 name: sensor
+#                 for name, sensor in sensors.items()
+#                 if not isinstance(sensor, ForceCamera)
+#             }
+#         else:
+#             # 念のため list/tuple にも対応（将来仕様変わったとき用）
+#             filtered_sensors = [
+#                 sensor for sensor in sensors if not isinstance(sensor, ForceCamera)
+#             ]
+
+#         return self._original_gpu_setup_sensors(filtered_sensors)
+
+#     ManiSkillScene._gpu_setup_sensors = _gpu_setup_sensors_skip_force
 
 
 # Override the already registered environments

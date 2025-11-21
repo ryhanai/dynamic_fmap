@@ -81,7 +81,7 @@ class Args:
     render_mode: str = "rgb_array"
     """The render mode used for saving videos. Typically there is also 'sensors' and 'all' render modes which further render all sensor outputs like cameras."""
 
-    num_envs: Annotated[int, tyro.conf.arg(aliases=["-n"])] = 1
+    num_envs: Annotated[int, tyro.conf.arg(aliases=["-n"])] = 10
     """Number of environments to run to replay trajectories. With CPU backends typically this is parallelized via python multiprocessing.
     For parallelized simulation backends like physx_gpu, this is parallelized within a single python process by leveraging the GPU."""
 

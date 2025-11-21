@@ -6,7 +6,7 @@ python -m mani_skill.trajectory.replay_trajectory \
   --use-first-env-state -c pd_ee_delta_pos -o state \
   --save-traj --num-envs 10 -b physx_cpu
 
-  python -m mani_skill.trajectory.replay_trajectory \
+python -m mani_skill.trajectory.replay_trajectory \
   --traj-path ~/.maniskill/demos/PushCube-v1/motionplanning/trajectory.h5 \
   --use-first-env-state -c pd_ee_delta_pos -o rgb \
   --save-traj --num-envs 10 -b physx_cpu
@@ -31,21 +31,63 @@ python train_rgbd.py --env-id PickCube-v1 \
   --total_iters 30000 --obs-mode "rgb" \
   --exp-name diffusion_policy-PickCube-v1-rgb-${demos}_motionplanning_demos-${seed} \
   --track  
-'''
 
-  
-'''
-Data without point forces, with RGB
-trajs_no_concat['observations'][0]['sensor_data']['base_camera']['rgb']
-'''
+Some parameters are different depending on each task, e.g., max_episode_steps
 
-'''
-Data with point forces
-trajs_no_concat['observations'][0]['sensor_data']['force_camera']['point_forces']['t_40']
-'''
+<<StackCube-v1>>
+seed=1
+demos=100
+python train.py --env-id StackCube-v1 \
+  --demo-path ~/.maniskill/demos/StackCube-v1/motionplanning/trajectory.state.pd_ee_delta_pos.physx_cpu.h5 \
+  --control-mode "pd_ee_delta_pos" --sim-backend "physx_cpu" --num-demos ${demos} --max_episode_steps 200 \
+  --total_iters 30000 \
+  --exp-name diffusion_policy-StackCube-v1-state-${demos}_motionplanning_demos-${seed} \
+  --demo_type=motionplanning --track 
 
-'''
-python train_with_force.py --env-id PickCube-v1   --demo-path ~/Downloads/250923/PickCube-v1/motionplanning/trajectory.state+rgb.pd_ee_delta_pos.physx_cpu.h5   --control-mode "pd_ee_delta_pos" --sim-backend "physx_cpu" --num-demos ${demos} --max_episode_steps 100   --total_iters 30000 --obs-mode "state+rgb"   --exp-name diffusion_policy-PickCube-v1-state+rgb-${demos}_motionplanning_demos-${seed}   --track
+python train_with_force.py --env-id StackCube-v1 \
+  --demo-path ~/Downloads/250923/StackCube-v1/motionplanning/trajectory.state+rgb.pd_ee_delta_pos.physx_cpu.h5 \
+  --control-mode "pd_ee_delta_pos" --sim-backend "physx_cpu" --num-demos ${demos} --max_episode_steps 200 \
+  --total_iters 30000 \
+  --obs-mode "state+rgb" \
+  --exp-name diffusion_policy-StackCube-v1-state+force-${demos}_motionplanning_demos-${seed} \
+  --demo_type=motionplanning --track
+
+<<PegInsertionSide-v1>>
+seed=1
+demos=100
+python train.py --env-id PegInsertionSide-v1 \
+  --demo-path ~/.maniskill/demos/PegInsertionSide-v1/motionplanning/trajectory.state.pd_ee_delta_pose.physx_cpu.h5 \
+  --control-mode "pd_ee_delta_pose" --sim-backend "physx_cpu" --num-demos ${demos} --max_episode_steps 300 \
+  --total_iters 100000 \
+  --exp-name diffusion_policy-PegInsertionSide-v1-state-${demos}_motionplanning_demos-${seed} \
+  --demo_type=motionplanning --track
+
+python train_with_force.py --env-id PegInsertionSide-v1 \
+  --demo-path ~/Downloads/250923/PegInsertionSide-v1/motionplanning/trajectory.state+rgb.pd_ee_delta_pose.physx_cpu.h5 \
+  --control-mode "pd_ee_delta_pose" --sim-backend "physx_cpu" --num-demos ${demos} --max_episode_steps 300 \
+  --total_iters 100000 \
+  --obs-mode "state+rgb" \
+  --exp-name diffusion_policy-PegInsertionSide-v1-state+force-${demos}_motionplanning_demos-${seed} \
+  --demo_type=motionplanning --track
+
+<<PushT-v1>>  
+seed=1
+demos=100
+python train.py --env-id PushT-v1 \
+  --demo-path ~/.maniskill/demos/PushT-v1/rl/trajectory.state.pd_ee_delta_pose.physx_cpu.h5 \
+  --control-mode "pd_ee_delta_pose" --sim-backend "physx_cpu" --num-demos ${demos} --max_episode_steps 150 --num_eval_envs 10 \
+  --total_iters 50000 --act_horizon 1 \
+  --exp-name diffusion_policy-PushT-v1-state-${demos}_rl_demos-${seed} --no_capture_video \
+  --demo_type=rl --track
+
+python train_with_force.py --env-id PushT-v1 \
+  --demo-path ~/Downloads/250923/PushT-v1/rl/trajectory.state+rgb.pd_ee_delta_pose.physx_cpu.h5 \
+  --control-mode "pd_ee_delta_pose" --sim-backend "physx_cpua" --num-demos ${demos} --max_episode_steps 150 --num_eval_envs 10 \
+  --total_iters 50000 --act_horizon 1 \
+  --obs-mode "state+rgb" \
+  --exp-name diffusion_policy-PushT-v1-state+force-${demos}_rl_demos-${seed} --no_capture_video \
+  --demo_type=rl --track
+
 '''
 
 
@@ -685,7 +727,7 @@ if __name__ == "__main__":
         control_mode=args.control_mode,
         reward_mode="sparse",
         obs_mode=args.obs_mode,
-        render_mode="rgb_array",
+        render_mode="rgb_array", 
         human_render_camera_configs=dict(shader_pack="default")
     )
     assert args.max_episode_steps != None, "max_episode_steps must be specified as imitation learning algorithms task solve speed is dependent on the data you train on"

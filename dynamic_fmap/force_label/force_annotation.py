@@ -7,7 +7,9 @@ from dynamic_fmap.benchmarks.maniskill import Replayer
 
 all_tasks = [
 #     "PickCube-v1",
-     "StackCube-v1",
+#     "StackCube-v1",
+#     "PegInsertionSide-v1",
+    "PushT-v1",
 ]
 
 # all_tasks = [
@@ -36,8 +38,9 @@ def get_task_demonstration_files(task_name: str,
                                  demo_root: Path = Path.home() / '.maniskill' / 'demos') -> list[str]:
     task_root = demo_root / task_name
     rl_traj_files = list(task_root.glob("rl/trajectory*.h5"))
-    mp_traj_files = list(task_root.glob("motionplanning/trajectory*.h5"))
-    return [str(p) for p in rl_traj_files] + [str(p) for p in mp_traj_files]
+    # mp_traj_files = list(task_root.glob("motionplanning/trajectory*.h5"))
+    # return [str(p) for p in rl_traj_files] + [str(p) for p in mp_traj_files]
+    return [str(p) for p in rl_traj_files]
 
 
 def annotate_tasks(task: Union[str, None] = None, count: Union[int, None] = None, visualize_existing_annotation=False):
