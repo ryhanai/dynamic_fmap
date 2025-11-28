@@ -82,7 +82,7 @@ python train.py --env-id PushT-v1 \
 
 python train_with_force.py --env-id PushT-v1 \
   --demo-path ~/Downloads/250923/PushT-v1/rl/trajectory.state+rgb.pd_ee_delta_pose.physx_cpu.h5 \
-  --control-mode "pd_ee_delta_pose" --sim-backend "physx_cpua" --num-demos ${demos} --max_episode_steps 150 --num_eval_envs 10 \
+  --control-mode "pd_ee_delta_pose" --sim-backend "physx_cpu" --num-demos ${demos} --max_episode_steps 150 --num_eval_envs 10 \
   --total_iters 50000 --act_horizon 1 \
   --obs-mode "state+rgb" \
   --exp-name diffusion_policy-PushT-v1-state+force-${demos}_rl_demos-${seed} --no_capture_video \
@@ -103,7 +103,7 @@ import os
 # suppress warnings from pkg_resources and
 import warnings
 warnings.filterwarnings("ignore", category=UserWarning, module="pkg_resources")
-os.environ["CUDA_VISIBLE_DEVICES"] = "0"  
+# os.environ["CUDA_VISIBLE_DEVICES"] = "0"  
 
 
 import random
