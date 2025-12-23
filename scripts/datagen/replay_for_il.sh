@@ -20,13 +20,13 @@ python -m dynamic_fmap.benchmarks.maniskill.replay_trajectory \
 
 python -m dynamic_fmap.benchmarks.maniskill.replay_trajectory \
     --traj-path ~/.maniskill/demos/PegInsertionSide-v1/motionplanning/trajectory.h5 \
-    --sim-backend cpu -o 'state+rgb' -b physx_cpu --save-traj $VISOPT --save-video --use-env-states \
+    --sim-backend cpu -o 'state+rgb+ts_force' -b physx_cpu --save-traj $VISOPT --save-video --use-env-states \
     --count $COUNT --render-mode rgb_array --num-envs $NUM_ENVS \
     --output-dir $OUTPUT_DIR
 
 python -m dynamic_fmap.benchmarks.maniskill.replay_trajectory \
     --traj-path ~/.maniskill/demos/PushT-v1/rl/trajectory.none.pd_ee_delta_pose.physx_cuda.h5 \
-    --sim-backend cpu -o 'state+rgb' -b physx_cpu --save-traj $VISOPT --save-video --use-env-states \
+    --sim-backend cpu -o 'state+rgb+ts_force' -b physx_cpu --save-traj $VISOPT --save-video --use-env-states \
     --count $COUNT --render-mode rgb_array --num-envs $NUM_ENVS \
     --output-dir $OUTPUT_DIR
 
