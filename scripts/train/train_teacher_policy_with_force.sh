@@ -1,7 +1,6 @@
 #!/bin/bash
 
 DEMOS=100
-DEMO_ROOT="~/Downloads/250923"
 MAX_EVAL_EVNS=10
 DIFFUSION_POLICY_ROOT="$HOME/Program/ManiSkill/examples/baselines/diffusion_policy"
 
@@ -98,8 +97,14 @@ fi
 
 if [ "$WITH_FORCE" = true ]; then
   TRAINER="$HOME/Program/moonshot/dynamic_fmap/dynamic_fmap/policy/train_with_force.py"
+  DEMO_ROOT="$HOME/Downloads/250923"
+  OBS_MODE_OPTION="--obs-mode state+rgb"
+  DATA_OBS_MODE="state+rgb"  
 else
   TRAINER="$HOME/Program/ManiSkill/examples/baselines/diffusion_policy/train.py"
+  DEMO_ROOT="$HOME/.maniskill/demos"
+  OBS_MODE_OPTION=""
+  DATA_OBS_MODE="state"
 fi
 
 
@@ -119,29 +124,38 @@ demos="$DEMOS"
 # --- 実行コマンドを変数に入れる ---
 case "$TASK" in
   StackCube-v1)
+    DEMO_METHOD="motionplanning"
+    DEMO_FILE="$DEMO_ROOT/$TASK/$DEMO_METHOD/trajectory.$DATA_OBS_MODE.pd_ee_delta_pos.physx_cpu.h5"    
     CMD="python $TRAINER --env-id $TASK \
-        --demo-path $DEMO_ROOT/$TASK/motionplanning/trajectory.state+rgb.pd_ee_delta_pos.physx_cpu.h5 \
+        --demo-path $DEMO_FILE \
         --control-mode "pd_ee_delta_pos" --sim-backend "physx_cpu" --num-demos ${demos} --max_episode_steps 200 \
         --total_iters 30000 \
-        --obs-mode "state+rgb" \
+        $OBS_MODE_OPTION \
         --exp-name diffusion_policy-${TASK}-state+force-${demos}_motionplanning_demos-${seed} \
         --demo_type=motionplanning --track"
     ;;
   PegInsertionSide-v1)
+    DEMO_METHOD="motionplanning"
+    CONTROL_MODE="pd_joint_pos"
+    # DEMO_METHOD="rl"
+    # CONTROL_MODE="pd_ee_delta_pose"        
+    DEMO_FILE="$DEMO_ROOT/$TASK/$DEMO_METHOD/trajectory.$DATA_OBS_MODE.$CONTROL_MODE.physx_cpu.h5"    
     CMD="python $TRAINER --env-id $TASK \
-        --demo-path $DEMO_ROOT/$TASK/motionplanning/trajectory.state+rgb.pd_ee_delta_pose.physx_cpu.h5 \
-        --control-mode "pd_ee_delta_pose" --sim-backend "physx_cpu" --num-demos ${demos} --max_episode_steps 300 \
+        --demo-path $DEMO_FILE \
+        --control-mode $CONTROL_MODE --sim-backend "physx_cpu" --num-demos ${demos} --max_episode_steps 300 \
         --total_iters 200000 \
-        --obs-mode "state+rgb" \
+        $OBS_MODE_OPTION \
         --exp-name diffusion_policy-${TASK}-v1-state+force-${demos}_motionplanning_demos-${seed} \
         --demo_type=motionplanning --track"
     ;;
   PushT-v1)
+    DEMO_METHOD="rl"
+    DEMO_FILE="$DEMO_ROOT/$TASK/$DEMO_METHOD/trajectory.$DATA_OBS_MODE.pd_ee_delta_pose.physx_cpu.h5"    
     CMD="python $TRAINER --env-id $TASK \
-        --demo-path $DEMO_ROOT/$TASK/rl/trajectory.state+rgb.pd_ee_delta_pose.physx_cpu.h5 \
+        --demo-path $DEMO_FILE \
         --control-mode "pd_ee_delta_pose" --sim-backend "physx_cpu" --num-demos ${demos} --max_episode_steps 150 --num_eval_envs $MAX_EVAL_ENVS \
         --total_iters 100000 --act_horizon 1 \
-        --obs-mode "state+rgb" \
+        $OBS_MODE_OPTION \
         --exp-name diffusion_policy-${TASK}-state+force-${demos}_rl_demos-${seed} --no_capture_video \
         --demo_type=rl --track"
     ;;

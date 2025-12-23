@@ -1,23 +1,22 @@
-from typing import Union
 import numpy as np
-# import transforms3d as tf
 from dataclasses import dataclass
-from dynamic_fmap.force_label import replay_trajectory
 from mani_skill.utils.registration import register_env
 from mani_skill.sensors.base_sensor import BaseSensor
 from mani_skill.envs import *
 from mani_skill.envs.sapien_env import BaseEnv
-# from mani_skill.envs.scene import ManiSkillScene
+from mani_skill.sensors.base_sensor import BaseSensorConfig
 import torch
 
 
 @dataclass
-class ForceCameraConfig:
+class ForceCameraConfig(BaseSensorConfig):
     uid: str
 
 
 class ForceCamera(BaseSensor):
-    """Implementation of the sensor to measure contact forces in the simulator."""
+    """
+    Implementation of the sensor to measure contact forces in the simulator.
+    """
 
     config: ForceCameraConfig
 
@@ -25,7 +24,7 @@ class ForceCamera(BaseSensor):
         self,
         force_camera_config: ForceCameraConfig,
         env: BaseEnv,
-        max_points: int = 4,  # 32
+        max_points: int = 32,
     ):
         super().__init__(config=force_camera_config)
         self._env = env
@@ -92,7 +91,7 @@ class ForceCamera(BaseSensor):
         #     # self._latest_values = {}
 
     
-    def get_obs(self):
+    def get_obs(self, **kwargs) -> dict:
         sensor_dict = {}
         sensor_dict['point_forces'] = self._latest_values[np.newaxis, ...]
         return sensor_dict
@@ -238,42 +237,4 @@ class TwoRobotPickCube(ForceObservation, TwoRobotPickCube):
 class TwoRobotStackCube(ForceObservation, TwoRobotStackCube):
     pass
 
-
-class Replayer:
-    def __init__(self):
-        pass
-        
-    def replay(self, 
-               traj_path: str, 
-               count: Union[int, None] = None, 
-               annotation=[],
-               visualize_existing_annotation=False,
-               output_dir: Union[str, None] = None,
-               ):
-        self._args = replay_trajectory.Args(
-            traj_path=traj_path,
-            sim_backend='cpu',
-            obs_mode='state+rgb', # 'rgb+depth', 'pointcloud', 'rgb', 'state+rgb+force'
-            target_control_mode=None,
-            verbose=False,
-            save_traj=True,
-            save_video=True,
-            max_retry=0,
-            discard_timeout=False,
-            allow_failure=False,
-            vis=True,
-            use_env_states=True,
-            use_first_env_state=False, 
-            count=count,  # None by default
-            reward_mode=None,
-            record_rewards=False,
-            shader=None, 
-            video_fps=None, 
-            render_mode='rgb_array', 
-            num_envs=1,
-            visualize_existing_annotation=False,
-            output_dir=output_dir,
-            )
-
-        replay_trajectory.main(self._args)
 

@@ -30,6 +30,9 @@ from mani_skill.utils import common, io_utils, wrappers
 from mani_skill.utils.logging_utils import logger
 from mani_skill.utils.wrappers.record import RecordEpisode
 
+import dynamic_fmap.benchmarks.maniskill.envs
+from dynamic_fmap.benchmarks.maniskill.patch_to_maniskill import *
+
 
 @dataclass
 class Args:
