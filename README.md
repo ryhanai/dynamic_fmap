@@ -22,7 +22,7 @@ $ scripts/data_gen/replay_for_il.sh
 ### Training
 ```bash
 $ conda activate diffusion-policy-ms
-$ cd <dynamic_fmap_dir>
+$ cd <dynamic_fmap_root>
 $ scripts/train/train_teacher_policy_with_force.sh --seed=0 --gpu=0 --task=PegInsertionSide-v1 --force
 ```
 
@@ -31,6 +31,13 @@ $ scripts/train/train_teacher_policy_with_force.sh --seed=0 --gpu=0 --task=PegIn
 
 ### Drawing trajectories using graps
 
+
+### (Optional) Analyze the data range of point forces (coordinates and force magnitude)
+```bash
+$ conda activate diffusion-policy-ms
+$ cd <dynamic_fmap_dir>
+$ python -m dynamic_fmap.benchmarks.utils.analyze_trajectory --demo_root <demo_root>
+```
 
 
 ## Official command from ManiSkill

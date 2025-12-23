@@ -11,7 +11,7 @@ else
     VISOPT=""
 fi
 
-# --use_env_statesと--use_first_env_stateの違いは？
+
 python -m dynamic_fmap.benchmarks.maniskill.replay_trajectory \
     --traj-path ~/.maniskill/demos/StackCube-v1/motionplanning/trajectory.h5 \
     --sim-backend cpu -o 'state+rgb+ts_force' -b physx_cpu --save-traj $VISOPT --save-video --use-env-states \

@@ -1,0 +1,4 @@
+all:
+  - StackCube-v1/motionplanning/trajectory.state+rgb+ts_force.pd_joint_pos.physx_cpu.h5
+  - PegInsertionSide-v1/motionplanning/trajectory.state+rgb+ts_force.pd_joint_pos.physx_cpu.h5
+  - PushT-v1/rl/trajectory.state+rgb+ts_force.pd_ee_delta_pose.physx_cpu.h5
