@@ -2,6 +2,7 @@ import numpy as np
 import torch
 from torch.utils.data.dataset import Dataset
 from gymnasium import spaces
+from dynamic_fmap.third_party.diffusion_policy_ms.diffusion_policy.utils import load_demo_dataset
 
 
 def reorder_keys(d, ref_dict):
@@ -30,7 +31,7 @@ class SmallDemoDataset_DiffusionPolicy(Dataset):  # Load everything into memory
                  ):
         self.include_rgb = include_rgb
         self.include_depth = include_depth
-        from diffusion_policy.utils import load_demo_dataset
+
         trajectories = load_demo_dataset(data_path, num_traj=num_traj, concat=False, state_only=False)
         # trajectories['observations'] is a list of dict, each dict is a traj, with keys in obs_space, values with length L+1
         # trajectories['actions'] is a list of np.ndarray (L, act_dim)

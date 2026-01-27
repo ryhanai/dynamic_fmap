@@ -92,7 +92,7 @@ class AddForceObservationWrapper(gym.Wrapper):
         # self.observation_space = spaces.Dict(new_spaces)
 
         new_obs = self.observation(self.unwrapped._init_raw_obs)
-        self.base_env.update_obs_space(new_obs)
+        self.unwrapped.update_obs_space(new_obs)
 
         # Extend _init_raw_obs of the base env
         # This is needed so that wrappers like FrameStack that rely on _init_raw_obs work correctly.

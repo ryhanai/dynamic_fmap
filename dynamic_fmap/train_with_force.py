@@ -90,23 +90,33 @@ python train_with_force.py --env-id PushT-v1 \
 
 '''
 
+# suppress warnings from pkg_resources
+import warnings
+warnings.filterwarnings(
+    "ignore",
+    message="pkg_resources is deprecated as an API.*",
+    category=UserWarning,
+)
 
-from ast import Add
-import sys
+# Suppressing future warnings is not recommended.
+# Please consider replacing pynvml with nvidia-ml-py, which is recommended by PyTorch
+# pip uninstall -y pynvml
+# pip install nvidia-ml-py
+warnings.filterwarnings(
+    "ignore",
+    message="The pynvml package is deprecated.*",
+    category=FutureWarning,
+)
 
-# from sympy import false
-sys.path.append('/home/ryo/Program/ManiSkill/examples/baselines/diffusion_policy')
+from pydantic.warnings import UnsupportedFieldAttributeWarning
+warnings.filterwarnings(
+    "ignore",
+    category=UnsupportedFieldAttributeWarning
+)
 
 ALGO_NAME = "BC_Diffusion_rgbd_UNet"
 
 import os
-
-# suppress warnings from pkg_resources and
-import warnings
-warnings.filterwarnings("ignore", category=UserWarning, module="pkg_resources")
-# os.environ["CUDA_VISIBLE_DEVICES"] = "0"  
-
-
 import random
 import time
 from collections import defaultdict
