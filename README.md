@@ -61,10 +61,11 @@ dynamic_fmap
   |-envs.py: sensor dataにpoint forcesを追加したEnvクラスを定義
   |-replay_trajectory.py: trajectoryをreplayしてpoint forcesを追加
   |-patch_to_maniskill.py: originalのcodeには手を加えずにmaniskill本体の関数を上書き（observation modeの追加など）
+  |-dataset.py
  |-dataset
   |-ForcePredictionDataset.py: not used，monolithicなtrainig programのtraining data管理機能を分割してここに入れる予定
  |-model
- |-policy
+ |-agents (policyから名前変更)
   |-train_with_force.py: これをdataset，model, policyに分割し，train_with_force.py自体はtop-levelでも良いかも．
  |-utils
   |-analyze_trajectory.py: trajectoryの分析（data distributionなど）

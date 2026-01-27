@@ -91,9 +91,10 @@ python train_with_force.py --env-id PushT-v1 \
 '''
 
 
+from ast import Add
 import sys
 
-from sympy import false
+# from sympy import false
 sys.path.append('/home/ryo/Program/ManiSkill/examples/baselines/diffusion_policy')
 
 ALGO_NAME = "BC_Diffusion_rgbd_UNet"
@@ -125,25 +126,23 @@ import tyro
 from diffusers.optimization import get_scheduler
 from diffusers.schedulers.scheduling_ddpm import DDPMScheduler
 from diffusers.training_utils import EMAModel
-from gymnasium import spaces
-# from mani_skill.utils.wrappers.flatten import FlattenRGBDObservationWrapper
+
 from torch.utils.data.dataloader import DataLoader
-from torch.utils.data.dataset import Dataset
+
 from torch.utils.data.sampler import BatchSampler, RandomSampler
 from torch.utils.tensorboard import SummaryWriter
 
-from diffusion_policy.conditional_unet1d import ConditionalUnet1D
-from diffusion_policy.evaluate import evaluate
-from diffusion_policy.make_env import make_eval_envs
-from diffusion_policy.plain_conv import PlainConv
-from diffusion_policy.utils import (IterationBasedBatchSampler,
-                                    #build_state_obs_extractor,
-                                    #convert_obs,
-                                    worker_init_fn)
+from dynamic_fmap.third_party.diffusion_policy_ms.diffusion_policy.conditional_unet1d import ConditionalUnet1D
+from dynamic_fmap.third_party.diffusion_policy_ms.diffusion_policy.evaluate import evaluate
+from dynamic_fmap.third_party.diffusion_policy_ms.diffusion_policy.make_env import make_eval_envs
+from dynamic_fmap.third_party.diffusion_policy_ms.diffusion_policy.plain_conv import PlainConv
+from dynamic_fmap.third_party.diffusion_policy_ms.diffusion_policy.utils import (IterationBasedBatchSampler, worker_init_fn)
 from dynamic_fmap.model.set_transformer import SmallSetTransformerEncoder
-import dynamic_fmap.benchmarks.maniskill
 import ipdb
 
+from dynamic_fmap.utils.normalization import normalize_point_forces
+from dynamic_fmap.benchmarks.maniskill.dataset import SmallDemoDataset_DiffusionPolicy
+from dynamic_fmap.benchmarks.maniskill.envs import FlattenRGBFObservationWrapper, AddForceObservationWrapper
 
 
 @dataclass
@@ -221,17 +220,6 @@ class Args:
     demo_type: Optional[str] = None
 
 
-def reorder_keys(d, ref_dict):
-    out = dict()
-    for k, v in ref_dict.items():
-        if isinstance(v, dict) or isinstance(v, spaces.Dict):
-            out[k] = reorder_keys(d[k], ref_dict[k])
-        else:
-            out[k] = d[k]
-
-    return out
-
-
 def convert_obs(obs, concat_fn, transpose_fn, state_obs_extractor, depth = True):
     img_dict = obs["sensor_data"]
     ls = ["rgb"]
@@ -281,222 +269,6 @@ def convert_obs(obs, concat_fn, transpose_fn, state_obs_extractor, depth = True)
 
 def build_state_obs_extractor(env_id):
     return lambda obs: [obs["state"]]
-
-
-from typing import Dict
-from mani_skill.envs.sapien_env import BaseEnv
-from mani_skill.utils import common
-
-class FlattenRGBFObservationWrapper(gym.ObservationWrapper):
-    """
-    Flattens the rgb+force mode observations into a dictionary with three keys, "rgb", "point_forces" and "state"
-
-    Args:
-        rgb (bool): Whether to include rgb images in the observation
-        state (bool): Whether to include state data in the observation
-    """
-
-    def __init__(self, env, rgb=True, force=True, state=True) -> None:
-        self.base_env: BaseEnv = env.unwrapped
-        super().__init__(env)
-        self.include_rgb = rgb
-        self.include_force = force
-        self.include_state = state
-
-        # check if rgb/depth data exists in first camera's sensor data
-        first_cam = next(iter(self.base_env._init_raw_obs["sensor_data"].values()))
-        if "rgb" not in first_cam:
-            self.include_rgb = False
-        # Currently, point_forces is ot supported by base_env. Thus, we do not check its existence here.
-
-        new_obs = self.observation(self.base_env._init_raw_obs)
-        self.base_env.update_obs_space(new_obs)
-
-    def observation(self, observation: Dict):
-        sensor_data = observation.pop("sensor_data")
-        del observation["sensor_param"]
-        rgb_images = []
-        # depth_images = []
-        for cam_data in sensor_data.values():
-            if self.include_rgb:
-                if "rgb" in cam_data:
-                    rgb_images.append(cam_data["rgb"])
-
-        if len(rgb_images) > 0:
-            rgb_images = torch.concat(rgb_images, axis=-1)
-        # flatten the rest of the data which should just be state data
-        observation = common.flatten_state_dict(
-            observation, use_torch=True, device=self.base_env.device
-        )
-        ret = dict()
-        if self.include_state:
-            ret["state"] = observation
-        if self.include_rgb:
-            ret["rgb"] = rgb_images
-        if self.include_force:
-            if "force_camera" in sensor_data:
-                ret["point_forces"] = sensor_data["force_camera"]["point_forces"]
-        return ret
-
-
-
-class SmallDemoDataset_DiffusionPolicy(Dataset):  # Load everything into memory
-    def __init__(self, data_path, obs_process_fn, obs_space, include_rgb, include_depth, device, num_traj):
-        self.include_rgb = include_rgb
-        self.include_depth = include_depth
-        from diffusion_policy.utils import load_demo_dataset
-        trajectories = load_demo_dataset(data_path, num_traj=num_traj, concat=False, state_only=False)
-        # trajectories['observations'] is a list of dict, each dict is a traj, with keys in obs_space, values with length L+1
-        # trajectories['actions'] is a list of np.ndarray (L, act_dim)
-        print("Raw trajectory loaded, beginning observation pre-processing...")
-
-        # Pre-process the observations, make them align with the obs returned by the obs_wrapper
-        obs_traj_dict_list = []
-        for obs_traj_dict in trajectories["observations"]:
-            _obs_traj_dict = reorder_keys(
-                obs_traj_dict, obs_space
-            )  # key order in demo is different from key order in env obs
-
-            _obs_traj_dict = obs_process_fn(_obs_traj_dict)
-            if self.include_depth:
-                _obs_traj_dict["depth"] = torch.Tensor(
-                    _obs_traj_dict["depth"].astype(np.float32)
-                ).to(device=device, dtype=torch.float16)
-            if self.include_rgb:
-                _obs_traj_dict["rgb"] = torch.from_numpy(_obs_traj_dict["rgb"]).to(
-                    device
-                )  # still uint8
-            _obs_traj_dict["state"] = torch.from_numpy(_obs_traj_dict["state"]).to(
-                device
-            )
-
-            ## This is bad workaround (add point forces to tmp_env.observation_space)
-            _obs_traj_dict["point_forces"] = torch.from_numpy(obs_traj_dict["sensor_data"]["force_camera"]["point_forces"][:, :, :6]).to(
-                device
-            )
-
-            obs_traj_dict_list.append(_obs_traj_dict)
-
-        trajectories["observations"] = obs_traj_dict_list
-        self.obs_keys = list(_obs_traj_dict.keys())
-        # Pre-process the actions
-        for i in range(len(trajectories["actions"])):
-            trajectories["actions"][i] = torch.Tensor(trajectories["actions"][i]).to(
-                device=device
-            )
-        print(
-            "Obs/action pre-processing is done, start to pre-compute the slice indices..."
-        )
-
-        # Pre-compute all possible (traj_idx, start, end) tuples, this is very specific to Diffusion Policy
-        if (
-            "delta_pos" in args.control_mode
-            or args.control_mode == "base_pd_joint_vel_arm_pd_joint_vel"
-        ):
-            print("Detected a delta controller type, padding with a zero action to ensure the arm stays still after solving tasks.")
-            self.pad_action_arm = torch.zeros(
-                (trajectories["actions"][0].shape[1] - 1,), device=device
-            )
-            # to make the arm stay still, we pad the action with 0 in 'delta_pos' control mode
-            # gripper action needs to be copied from the last action
-        else:
-            # NOTE for absolute joint pos control probably should pad with the final joint position action.
-            raise NotImplementedError(f"Control Mode {args.control_mode} not supported")
-        self.obs_horizon, self.pred_horizon = obs_horizon, pred_horizon = (
-            args.obs_horizon,
-            args.pred_horizon,
-        )
-        self.slices = []
-        num_traj = len(trajectories["actions"])
-        total_transitions = 0
-        for traj_idx in range(num_traj):
-            L = trajectories["actions"][traj_idx].shape[0]
-            assert trajectories["observations"][traj_idx]["state"].shape[0] == L + 1
-            total_transitions += L
-
-            # |o|o|                             observations: 2
-            # | |a|a|a|a|a|a|a|a|               actions executed: 8
-            # |p|p|p|p|p|p|p|p|p|p|p|p|p|p|p|p| actions predicted: 16
-            pad_before = obs_horizon - 1
-            # Pad before the trajectory, so the first action of an episode is in "actions executed"
-            # obs_horizon - 1 is the number of "not used actions"
-            pad_after = pred_horizon - obs_horizon
-            # Pad after the trajectory, so all the observations are utilized in training
-            # Note that in the original code, pad_after = act_horizon - 1, but I think this is not the best choice
-            self.slices += [
-                (traj_idx, start, start + pred_horizon)
-                for start in range(-pad_before, L - pred_horizon + pad_after)
-            ]  # slice indices follow convention [start, end)
-
-        print(
-            f"Total transitions: {total_transitions}, Total obs sequences: {len(self.slices)}"
-        )
-
-        self.trajectories = trajectories
-
-    def __getitem__(self, index):
-        traj_idx, start, end = self.slices[index]
-        L, act_dim = self.trajectories["actions"][traj_idx].shape
-
-        obs_traj = self.trajectories["observations"][traj_idx]
-        obs_seq = {}
-        for k, v in obs_traj.items():
-            obs_seq[k] = v[
-                max(0, start) : start + self.obs_horizon
-            ]  # start+self.obs_horizon is at least 1
-            if start < 0:  # pad before the trajectory
-                pad_obs_seq = torch.stack([obs_seq[k][0]] * abs(start), dim=0)
-                obs_seq[k] = torch.cat((pad_obs_seq, obs_seq[k]), dim=0)
-            # don't need to pad obs after the trajectory, see the above char drawing
-
-        act_seq = self.trajectories["actions"][traj_idx][max(0, start) : end]
-        if start < 0:  # pad before the trajectory
-            act_seq = torch.cat([act_seq[0].repeat(-start, 1), act_seq], dim=0)
-        if end > L:  # pad after the trajectory
-            gripper_action = act_seq[-1, -1]  # assume gripper is with pos controller
-            pad_action = torch.cat((self.pad_action_arm, gripper_action[None]), dim=0)
-            act_seq = torch.cat([act_seq, pad_action.repeat(end - L, 1)], dim=0)
-            # making the robot (arm and gripper) stay still
-        assert (
-            obs_seq["state"].shape[0] == self.obs_horizon
-            and act_seq.shape[0] == self.pred_horizon
-        )
-        return {
-            "observations": obs_seq,
-            "actions": act_seq,
-        }
-
-    def __len__(self):
-        return len(self.slices)
-
-
-def normalize_range(x, source_range, target_range):
-    source_min, source_max = source_range
-    target_min, target_max = target_range
-    assert source_max > source_min and target_max > target_min
-    x_clipped = torch.clamp(x, min=source_min, max=source_max)
-    return (x_clipped - source_min) * (target_max - target_min) / (source_max - source_min) + target_min
-
-
-# def normalize_point_forces(point_forces, force_range=[-1, 1]):
-#     coords = point_forces[..., :3]
-#     coords = normalize_range(coords, [-0.2, 0.2], [0.1, 0.9])  # (B, obs_horizon, F*k, 3)            
-#     force_magnitudes = point_forces[..., 3:6]
-#     force_magnitudes = normalize_range(force_magnitudes, force_range, [0.1, 0.9])  # (B, obs_horizon, F*k, 3)            
-#     return torch.cat([coords, force_magnitudes], dim=-1)
-
-
-def normalize_point_forces(point_forces):
-    def to_log_scale(x):
-        return 0.25 * torch.log10(1 + 100 * x)
-
-    coords = point_forces[..., :3]
-    coords = normalize_range(coords, [-0.2, 0.2], [0.1, 0.9])  # (B, obs_horizon, F*k, 3)            
-    force_vectors = point_forces[..., 3:6]
-    force_vectors = torch.abs(force_vectors)  # sign-less vectors
-    force_vectors = to_log_scale(force_vectors)
-    force_vectors = normalize_range(force_vectors, [0, 1.0], [0.1, 0.9])  # (B, obs_horizon, F*k, 3)            
-    return torch.cat([coords, force_vectors], dim=-1)
 
 
 class Agent(nn.Module):
@@ -740,7 +512,7 @@ if __name__ == "__main__":
         env_kwargs,
         other_kwargs,
         video_dir=f"runs/{run_name}/videos" if args.capture_video else None,
-        wrappers=[FlattenRGBFObservationWrapper],
+        wrappers=[FlattenRGBFObservationWrapper, AddForceObservationWrapper],
     )
 
     if args.track:
@@ -789,7 +561,10 @@ if __name__ == "__main__":
         include_rgb=include_rgb,
         include_depth=include_depth,
         device=device,
-        num_traj=args.num_demos
+        num_traj=args.num_demos,
+        control_mode=args.control_mode,
+        obs_horizon=args.obs_horizon,
+        pred_horizon=args.pred_horizon
     )
     sampler = RandomSampler(dataset, replacement=False)
     batch_sampler = BatchSampler(sampler, batch_size=args.batch_size, drop_last=True)

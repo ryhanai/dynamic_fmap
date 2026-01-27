@@ -96,7 +96,7 @@ fi
 
 
 if [ "$WITH_FORCE" = true ]; then
-  TRAINER="$HOME/Program/moonshot/dynamic_fmap/dynamic_fmap/policy/train_with_force.py"
+  TRAINER="$HOME/Program/moonshot/dynamic_fmap/dynamic_fmap/train_with_force.py"
   DEMO_ROOT="$HOME/Downloads/250923"
   OBS_MODE_OPTION="--obs-mode state+rgb"
   DATA_OBS_MODE="state+rgb"  
@@ -136,11 +136,11 @@ case "$TASK" in
     ;;
   PegInsertionSide-v1)
     DEMO_METHOD="motionplanning"
-    CONTROL_MODE="pd_joint_pos"
+    # CONTROL_MODE="pd_joint_pos"
     # DEMO_METHOD="rl"
-    # CONTROL_MODE="pd_ee_delta_pose"        
+    CONTROL_MODE="pd_ee_delta_pose"        
     DEMO_FILE="$DEMO_ROOT/$TASK/$DEMO_METHOD/trajectory.$DATA_OBS_MODE.$CONTROL_MODE.physx_cpu.h5"    
-    CMD="python $TRAINER --env-id $TASK \
+    CMD="ipython $TRAINER -i -- --env-id $TASK \
         --demo-path $DEMO_FILE \
         --control-mode $CONTROL_MODE --sim-backend "physx_cpu" --num-demos ${demos} --max_episode_steps 300 \
         --total_iters 200000 \
