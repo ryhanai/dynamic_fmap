@@ -28,12 +28,6 @@ class FlattenRGBFObservationWrapper(gym.ObservationWrapper):
         self.include_force = force
         self.include_state = state
 
-        # check if rgb/depth data exists in first camera's sensor data
-        first_cam = next(iter(self.base_env._init_raw_obs["sensor_data"].values()))
-        if "rgb" not in first_cam:
-            self.include_rgb = False
-        # Currently, point_forces is ot supported by base_env. Thus, we do not check its existence here.
-
         new_obs = self.observation(self.base_env._init_raw_obs)
         self.base_env.update_obs_space(new_obs)
 
@@ -41,24 +35,23 @@ class FlattenRGBFObservationWrapper(gym.ObservationWrapper):
         sensor_data = observation.pop("sensor_data")
         del observation["sensor_param"]
         rgb_images = []
-        # depth_images = []
-        for cam_data in sensor_data.values():
-            if self.include_rgb:
-                if "rgb" in cam_data:
-                    rgb_images.append(cam_data["rgb"])
+        for k, v in sensor_data.items():
+            if self.include_rgb and k != "point_forces":
+                rgb_images.append(v["rgb"])
 
         if len(rgb_images) > 0:
             rgb_images = torch.concat(rgb_images, axis=-1)
         # flatten the rest of the data which should just be state data
         observation = common.flatten_state_dict(observation, use_torch=True, device=self.base_env.device)
+
+
         ret = dict()
         if self.include_state:
             ret["state"] = observation
         if self.include_rgb:
             ret["rgb"] = rgb_images
         if self.include_force:
-            if "force_camera" in sensor_data:
-                ret["point_forces"] = sensor_data["force_camera"]["point_forces"]
+            ret["point_forces"] = sensor_data["point_forces"]
         return ret
 
 
@@ -71,7 +64,7 @@ class AddForceObservationWrapper(gym.Wrapper):
       gym.ObservationWrapper cannot extend _init_raw_obs directly, so we extend gym.Wrapper.
     """
 
-    def __init__(self, env: gym.Env, num_point_forces: int = 8):
+    def __init__(self, env: gym.Env, num_point_forces: int = 16):
         super().__init__(env)
 
         self._pf_key = "point_forces"
@@ -143,19 +136,21 @@ class AddForceObservationWrapper(gym.Wrapper):
         obs, reward, terminated, truncated, info = self.env.step(action)
         return self.observation(obs), reward, terminated, truncated, info
 
+    def get_obs(self):
+        obs = self.unwrapped.get_obs()
+        return self.observation(obs)
+
     def observation(self, obs):
-        # obs is the underlying env's observation; add point forces.
         if not isinstance(obs, dict):
-            # Some envs return OrderedDict; treat as mapping.
             raise TypeError("Underlying env must return a dict-like observation.")
 
         obs = dict(obs)  # avoid mutating underlying structure
-        obs["point_forces"] = self._get_point_forces()
+        obs["sensor_data"]["point_forces"]= self._get_point_forces()
         return obs
 
 
 if __name__ == "__main__":
     base_env = gym.make('PegInsertionSide-v1', obs_mode='state+rgb')
-    fenv = FlattenRGBFObservationWrapper(base_env, rgb=True, force=True, state=True)
-    aenv = AddForceObservationWrapper(fenv, num_point_forces=16)
-    env = FrameStack(aenv, num_stack=2)
+    aenv = AddForceObservationWrapper(base_env, num_point_forces=16)
+    fenv = FlattenRGBFObservationWrapper(aenv, rgb=True, force=True, state=True)
+    env = FrameStack(fenv, num_stack=2)

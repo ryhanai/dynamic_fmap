@@ -30,8 +30,7 @@ from mani_skill.utils import common, io_utils, wrappers
 from mani_skill.utils.logging_utils import logger
 from mani_skill.utils.wrappers.record import RecordEpisode
 
-import dynamic_fmap.benchmarks.maniskill.envs
-from dynamic_fmap.benchmarks.maniskill.patch_to_maniskill import *
+from dynamic_fmap.benchmarks.maniskill.envs import AddForceObservationWrapper
 
 
 @dataclass
@@ -313,7 +312,8 @@ def replay_cpu_sim(
                     )
 
                     global_env = env
-                    fixed_obs = env.base_env.get_obs()
+                    # fixed_obs = env.base_env.get_obs()
+                    fixed_obs = env.env.get_obs()  # Observation with point forces is used instead of base_env observation
                     # print(f'FIXED_OBS: {fixed_obs}')
                     recursive_replace(
                         env._trajectory_buffer.observation,
@@ -353,7 +353,7 @@ def replay_cpu_sim(
 
             # From joint position to others
             elif ori_control_mode == "pd_joint_pos":
-                info = action_conversion.from_pd_joit_pos(
+                info = action_conversion.from_pd_joint_pos(
                     args.target_control_mode,
                     ori_actions,
                     ori_env,
@@ -428,6 +428,11 @@ def _main(
     
     print(f'ENV_KWARGS: {env_kwargs}')
 
+    orig_obs_mode = env_kwargs.get("obs_mode")
+    obs_flags = orig_obs_mode.split('+')
+    ts_force_needed = 'ts_force' in obs_flags
+    env_kwargs['obs_mode'] = '+'.join([m for m in obs_flags if m != 'ts_force'])
+
     env = gym.make(env_id, **env_kwargs)
     # TODO (support adding wrappers to the recorded data?)
 
@@ -455,7 +460,8 @@ def _main(
     if len(parts) > 1:
         ori_traj_name = parts[0]
     suffix = "{}.{}.{}".format(
-        env.unwrapped.obs_mode,
+        # env.unwrapped.obs_mode,
+        orig_obs_mode,
         env.unwrapped.control_mode,
         env.unwrapped.backend.sim_backend,
     )
@@ -469,6 +475,9 @@ def _main(
             ori_env = None
     else:
         pass
+
+    if ts_force_needed:
+        env = AddForceObservationWrapper(env)
 
     env = wrappers.RecordEpisode(
         env,

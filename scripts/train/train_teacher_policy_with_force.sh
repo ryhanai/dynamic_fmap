@@ -99,11 +99,13 @@ if [ "$WITH_FORCE" = true ]; then
   DEMO_ROOT="$HOME/Downloads/250923"
   OBS_MODE_OPTION="--obs-mode state+rgb"
   DATA_OBS_MODE="state+rgb"  
+  BATCH_SIZE=256
 else
   TRAINER="$HOME/Program/ManiSkill/examples/baselines/diffusion_policy/train.py"
   DEMO_ROOT="$HOME/.maniskill/demos"
   OBS_MODE_OPTION=""
   DATA_OBS_MODE="state"
+  BATCH_SIZE=1024
 fi
 
 
@@ -111,6 +113,7 @@ fi
 echo "TRAINER     : $TRAINER"
 echo "NUM DEMOS   : $DEMOS"
 echo "TASK        : $TASK"
+echo "BATCH SIZE  : $BATCH_SIZE"
 echo "HOST GPUS   : $NUM_GPUS"
 echo "SEED        : $SEED"
 echo "GPU         : $GPU"
