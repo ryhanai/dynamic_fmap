@@ -504,6 +504,9 @@ if __name__ == "__main__":
 
     device = torch.device("cuda" if torch.cuda.is_available() and args.cuda else "cpu")
 
+    # remove 'ts_force' flag
+    args.obs_mode = "+".join([m for m in args.obs_mode.split('+') if m != 'ts_force'])
+
     # create evaluation environment
     env_kwargs = dict(
         control_mode=args.control_mode,
@@ -522,7 +525,7 @@ if __name__ == "__main__":
         env_kwargs,
         other_kwargs,
         video_dir=f"runs/{run_name}/videos" if args.capture_video else None,
-        wrappers=[FlattenRGBFObservationWrapper, AddForceObservationWrapper],
+        wrappers=[AddForceObservationWrapper, FlattenRGBFObservationWrapper],
     )
 
     if args.track:
@@ -558,6 +561,7 @@ if __name__ == "__main__":
 
     # create temporary env to get original observation space as AsyncVectorEnv (CPU parallelization) doesn't permit that
     tmp_env = gym.make(args.env_id, **env_kwargs)
+
     orignal_obs_space = tmp_env.observation_space
     # determine whether the env will return rgb and/or depth data
     include_rgb = tmp_env.unwrapped.obs_mode_struct.visual.rgb

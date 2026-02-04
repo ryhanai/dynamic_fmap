@@ -150,7 +150,7 @@ class AddForceObservationWrapper(gym.Wrapper):
 
 
 if __name__ == "__main__":
-    base_env = gym.make('PegInsertionSide-v1', obs_mode='state+rgb')
+    base_env = gym.make_env('PegInsertionSide-v1', obs_mode='state+rgb')
     aenv = AddForceObservationWrapper(base_env, num_point_forces=16)
     fenv = FlattenRGBFObservationWrapper(aenv, rgb=True, force=True, state=True)
     env = FrameStack(fenv, num_stack=2)

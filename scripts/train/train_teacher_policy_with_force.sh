@@ -97,7 +97,7 @@ fi
 if [ "$WITH_FORCE" = true ]; then
   TRAINER="$HOME/Program/moonshot/dynamic_fmap/dynamic_fmap/train_with_force.py"
   DEMO_ROOT="$HOME/Downloads/250923"
-  OBS_MODE_OPTION="--obs-mode state+rgb"
+  OBS_MODE_OPTION="--obs-mode state+rgb+ts_force"
   DATA_OBS_MODE="state+rgb"  
   BATCH_SIZE=256
 else
