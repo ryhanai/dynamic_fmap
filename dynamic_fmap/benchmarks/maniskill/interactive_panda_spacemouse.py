@@ -19,11 +19,13 @@ from mani_skill.utils.wrappers.record import RecordEpisode
 import tyro
 from dataclasses import dataclass
 
+# --- Additional tasks and task-space force observation support
+from dynamic_fmap.benchmarks.maniskill.pick_from_duplicated import PickDuplicatedEnv
+from dynamic_fmap.benchmarks.maniskill.envs import *
 
 # --- SpaceMouse support ---
 import threading
 import time
-import numpy as np
 
 try:
     import pyspacemouse
