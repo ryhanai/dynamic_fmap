@@ -55,28 +55,16 @@ class PickDuplicatedEnv(BaseEnv):
         super()._load_agent(options, sapien.Pose(p=[-0.615, 0, 0]))
 
     def _load_scene(self, options: dict):
-        self.cube_half_size = common.to_tensor([0.02] * 3, device=self.device)
+        # self.cube_half_size = common.to_tensor([0.02] * 3, device=self.device)
         self.table_scene = TableSceneBuilder(
             env=self, robot_init_qpos_noise=self.robot_init_qpos_noise
         )
         self.table_scene.build()
-        # self.cubeA = actors.build_cube(
-        #     self.scene,
-        #     half_size=0.02,
-        #     color=[1, 0, 0, 1],
-        #     name="cubeA",
-        #     initial_pose=sapien.Pose(p=[0, 0, 0.1]),
-        # )
-        # self.cubeB = actors.build_cube(
-        #     self.scene,
-        #     half_size=0.02,
-        #     color=[0, 1, 0, 1],
-        #     name="cubeB",
-        #     initial_pose=sapien.Pose(p=[1, 0, 0.1]),
-        # )
 
         self.items = []
-        for i in range(6):
+        self.number_of_objects = 6
+
+        for i in range(self.number_of_objects):
             self.items.append(
                 self._load_mesh(
                     name=f"java_curry_chukara{i:03d}",
@@ -101,13 +89,31 @@ class PickDuplicatedEnv(BaseEnv):
         # builder.add_visual_from_file(filename="/home/ryo/Dataset/ycb_conveni/ycb/010_potted_meat_can/google_16k/textured.obj")
 
     def _initialize_episode(self, env_idx: torch.Tensor, options: dict):
+        n_active_objects = np.clip(np.random.poisson(4), 2, self.number_of_objects)
+        self.target = self.items[np.random.randint(n_active_objects)]
+
         with torch.device(self.device):
             b = len(env_idx)
+
             self.table_scene.initialize(env_idx)
 
-            # xyz = torch.zeros((b, 3))
-            # xyz[:, 2] = 0.02
-            # xy = torch.rand((b, 2)) * 0.2 - 0.1
+            for i in range(n_active_objects):
+                item = self.items[i]  # type: sapien.Actor
+                xyz = torch.zeros((b, 3))
+                xyz[:, 2] = 0.0
+                xy = torch.rand(b, 2) * torch.tensor([0.03, 0.0]) \
+                    + torch.tensor([0.015, (-(n_active_objects - 1) / 2 + i) * 0.1])
+                xyz[:, :2] = xy
+                item.set_pose(Pose.create_from_pq(p=xyz.clone()))
+
+            for j in range(n_active_objects, self.number_of_objects):
+                item = self.items[j]  # type: sapien.Actor
+                item.set_pose(
+                    Pose.create_from_pq(
+                        p=torch.tensor([[0.0, -1.0, 0.04 * (j - n_active_objects)]]).repeat(b, 1)
+                    )
+                )
+
             # region = [[-0.1, -0.2], [0.1, 0.2]]
             # sampler = randomization.UniformPlacementSampler(
             #     bounds=region, batch_size=b, device=self.device
@@ -135,9 +141,13 @@ class PickDuplicatedEnv(BaseEnv):
             # self.cubeB.set_pose(Pose.create_from_pq(p=xyz, q=qs))
 
     def evaluate(self):
-        a = self.unwrapped.scene.actors['java_curry_chukara000']
+        is_target_grasped = self.agent.is_grasping(self.target)
+        success = self.target.pose.p[..., 2] > 0.1
+
         return {
-            "success": a.pose.p[..., 2] > 0.1,
+            "target_name": self.target.name,
+            "is_target_grasped": is_target_grasped,
+            "success": success.bool(),
         }
 
         # pos_A = self.cubeA.pose.p
@@ -210,7 +220,12 @@ class PickDuplicatedEnv(BaseEnv):
 
         # reward[info["success"]] = 8
 
-        reward[info["success"]] = 0
+        tcp_pose = self.agent.tcp.pose.p
+        target_pos = self.target.pose.p
+        target_to_tcp_dist = torch.linalg.norm(tcp_pose - target_pos, axis=1)
+        reward = 2 * (1 - torch.tanh(5 * target_to_tcp_dist))
+        reward[info["is_target_grasped"]] = 4
+        reward[info["success"]] = 8
 
         return reward
 

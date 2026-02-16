@@ -58,7 +58,7 @@ class SmallDemoDataset_DiffusionPolicy(Dataset):  # Load everything into memory
             )
 
             ## This is bad workaround (add point forces to tmp_env.observation_space)
-            _obs_traj_dict["point_forces"] = torch.from_numpy(obs_traj_dict["sensor_data"]["force_camera"]["point_forces"][:, :, :6]).to(
+            _obs_traj_dict["point_forces"] = torch.from_numpy(obs_traj_dict["sensor_data"]["point_forces"][:, :, :6]).to(
                 device
             )
 

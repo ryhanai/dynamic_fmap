@@ -30,7 +30,8 @@ from mani_skill.utils import common, io_utils, wrappers
 from mani_skill.utils.logging_utils import logger
 from mani_skill.utils.wrappers.record import RecordEpisode
 
-from dynamic_fmap.benchmarks.maniskill.envs import AddForceObservationWrapper, make_env
+from dynamic_fmap.benchmarks.maniskill.envs import AddForceObservationWrapper
+from dynamic_fmap.benchmarks.maniskill.pick_from_duplicated import PickDuplicatedEnv
 
 
 @dataclass
