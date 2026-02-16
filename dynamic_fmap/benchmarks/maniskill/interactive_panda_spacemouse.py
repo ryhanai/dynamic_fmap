@@ -27,11 +27,23 @@ from dynamic_fmap.benchmarks.maniskill.envs import *
 import threading
 import time
 
+from transforms3d.quaternions import qmult, qinverse
+
 try:
     import pyspacemouse
     _HAS_SPACEMOUSE = True
 except Exception:
     _HAS_SPACEMOUSE = False
+
+
+def pos_distance(p1, p2) -> float:
+    return float(np.linalg.norm(np.array(p1) - np.array(p2)))
+
+
+def quat_distance_deg(q1, q2) -> float:
+    q_rel = qmult(q2, qinverse(q1))
+    w = np.clip(abs(q_rel[0]), -1.0, 1.0)
+    return np.rad2deg(2. * np.arccos(w))
 
 
 class SpaceMouseDevice:
@@ -41,7 +53,7 @@ class SpaceMouseDevice:
     """
     def __init__(
         self,
-        translation_scale=0.005,   # meters per tick (tune)
+        translation_scale=0.01,   # meters per tick (tune)
         rotation_scale=0.02,      # rad per tick (tune)
         deadzone=0.06,            # ignore tiny noise
         hz=200,
@@ -99,8 +111,8 @@ class SpaceMouseDevice:
                 # r = np.array([state.roll, state.pitch, state.yaw], dtype=np.float32)
 
                 # StackCube-v1
-                t = np.array([-state.y, state.x, -state.z], dtype=np.float32)
-                r = np.array([-state.roll, -state.pitch, state.yaw], dtype=np.float32)
+                # t = np.array([-state.y, state.x, -state.z], dtype=np.float32)
+                # r = np.array([-state.roll, -state.pitch, state.yaw], dtype=np.float32)
                 # PegInsertion-v1
                 t = np.array([state.x, state.y, -state.z], dtype=np.float32)
                 r = np.array([-state.pitch, state.roll, state.yaw], dtype=np.float32)
@@ -411,26 +423,61 @@ def solve(env: BaseEnv, debug=False, vis=False):
             select_panda_hand()
             pose = sapien.Pose(p=dpos)
             pose.set_rpy(drot)
-            transform_window.gizmo_matrix = (transform_window._gizmo_pose * pose).to_transformation_matrix()
-            transform_window.update_ghost_objects()
-            execute_current_pose = True
+
+            # transform_window.gizmo_matrix = (transform_window._gizmo_pose * pose).to_transformation_matrix()
+            # transform_window.update_ghost_objects()
+            # if env.unwrapped.robot_uids == "panda" or env.unwrapped.robot_uids == "panda_wristcam":            
+            #     tcp_pose_goal = transform_window._gizmo_pose * sapien.Pose([0, 0, 0.1])
+            # elif env.unwrapped.robot_uids == "panda_stick":
+            #     tcp_pose_goal = transform_window._gizmo_pose * sapien.Pose([0, 0, 0.15])
+
+            # env is vectorinzed, we assume single environment at the time of teaching
+            # p1 = env.agent.tcp.pose.p[0]
+            # q1 = env.agent.tcp.pose.q[0]
+            # p2 = tcp_pose_goal.p
+            # nq2 = tcp_pose_goal.q
+
+            cur_pose = env.agent.tcp.pose
+            goal_pose = cur_pose * pose
+            
+            # if pos_distance(p1, p2) > 0.002 or quat_distance_deg(q1, q2) > 2:
+            #     if np.linalg.norm(dpos) > 0.002 or np.linalg.norm(drot) > np.deg2rad(2):
+            #         execute_current_pose = True
+
+            if pos_distance(cur_pose.p[0], goal_pose.p[0]) > 0.002 or quat_distance_deg(cur_pose.q[0], goal_pose.q[0]) > 2:
+                transform_window.gizmo_matrix = (transform_window._gizmo_pose * pose).to_transformation_matrix()
+                transform_window.update_ghost_objects()
+                execute_current_pose = True
+
+            # print(f"D={quat_distance_deg(q1, q2)}, {pos_distance(p1, p2)}, {dpos}, {drot}")
         else:
             # keep your existing keyboard control here
             pass
 
 
         if execute_current_pose:
-            # z-offset of end-effector gizmo to TCP position is hardcoded for the panda robot here
-            if env.unwrapped.robot_uids == "panda" or env.unwrapped.robot_uids == "panda_wristcam":
-                result = planner.move_to_pose_with_screw(transform_window._gizmo_pose * sapien.Pose([0, 0, 0.1]), dry_run=True)
-            elif env.unwrapped.robot_uids == "panda_stick":
-                result = planner.move_to_pose_with_screw(transform_window._gizmo_pose * sapien.Pose([0, 0, 0.15]), dry_run=True)
-            if result != -1 and len(result["position"]) < 150:
-                _, reward, _ ,_, info = planner.follow_path(result)
-                print(f"Reward: {reward}, Info: {info}")
-            else:
-                if result == -1: print("Plan failed")
-                else: print("Generated motion plan was too long. Try a closer sub-goal")
+            try:
+                # z-offset of end-effector gizmo to TCP position is hardcoded for the panda robot here
+                if env.unwrapped.robot_uids == "panda" or env.unwrapped.robot_uids == "panda_wristcam":
+                    result = planner.move_to_pose_with_screw(transform_window._gizmo_pose * sapien.Pose([0, 0, 0.1]), dry_run=True)
+                elif env.unwrapped.robot_uids == "panda_stick":
+                    result = planner.move_to_pose_with_screw(transform_window._gizmo_pose * sapien.Pose([0, 0, 0.15]), dry_run=True)
+
+                if result != -1 and len(result["position"]) < 150:
+                    _, reward, _ ,_, info = planner.follow_path(result)
+                    print(f"Reward: {reward}, Info: {info}")
+                else:
+                    if result == -1: print("Plan failed")
+                    else: print("Generated motion plan was too long. Try a closer sub-goal")
+
+            except RuntimeError as e:  
+                # TOPP sometimes fails when the path found by sampling-based planner is not feasible
+                # duplicated waypoints etc.
+                if "Fail to parameterize path" in str(e):
+                    print("give up path execution")
+                else:
+                    raise e
+
             execute_current_pose = False
 
     return args
