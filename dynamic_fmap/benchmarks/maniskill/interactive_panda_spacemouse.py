@@ -325,6 +325,7 @@ def solve(env: BaseEnv, debug=False, vis=False):
                 spacemouse = None
                 use_spacemouse = False
 
+    minute_mode = False
 
     while True:
 
@@ -336,6 +337,7 @@ def solve(env: BaseEnv, debug=False, vis=False):
         env.render_human()
         
         execute_current_pose = False
+
         if viewer.window.key_press("h"):
             print("""Available commands:
             h: print this help menu
@@ -344,6 +346,7 @@ def solve(env: BaseEnv, debug=False, vis=False):
             j: move the panda hand down
             arrow_keys: move the panda hand in the direction of the arrow keys
             n: execute command via motion planning to make the robot move to the target pose indicated by the ghost panda arm
+            m: toggle minute mode
             c: stop this episode and record the trajectory and move on to a new episode
             q: quit the script and stop collecting data. Save trajectories and optionally videos.
             """)
@@ -369,6 +372,9 @@ def solve(env: BaseEnv, debug=False, vis=False):
         #     pass
         elif viewer.window.key_press("n"):
             execute_current_pose = True
+        elif viewer.window.key_press("m"):
+            minute_mode = not minute_mode
+            print(f'minute mode = {minute_mode}')
         elif viewer.window.key_press("g") and robot_has_gripper:
             if gripper_open:
                 gripper_open = False
@@ -447,7 +453,8 @@ def solve(env: BaseEnv, debug=False, vis=False):
             if pos_distance(cur_pose.p[0], goal_pose.p[0]) > 0.002 or quat_distance_deg(cur_pose.q[0], goal_pose.q[0]) > 2:
                 transform_window.gizmo_matrix = (transform_window._gizmo_pose * pose).to_transformation_matrix()
                 transform_window.update_ghost_objects()
-                execute_current_pose = True
+                if minute_mode:
+                    execute_current_pose = True
 
             # print(f"D={quat_distance_deg(q1, q2)}, {pos_distance(p1, p2)}, {dpos}, {drot}")
         else:
@@ -462,6 +469,9 @@ def solve(env: BaseEnv, debug=False, vis=False):
                     result = planner.move_to_pose_with_screw(transform_window._gizmo_pose * sapien.Pose([0, 0, 0.1]), dry_run=True)
                 elif env.unwrapped.robot_uids == "panda_stick":
                     result = planner.move_to_pose_with_screw(transform_window._gizmo_pose * sapien.Pose([0, 0, 0.15]), dry_run=True)
+
+                # print planned trajectory
+                # print(result)
 
                 if result != -1 and len(result["position"]) < 150:
                     _, reward, _ ,_, info = planner.follow_path(result)
