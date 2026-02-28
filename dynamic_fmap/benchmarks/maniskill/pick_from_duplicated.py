@@ -3,6 +3,7 @@ from typing import Any, Dict, Union
 import numpy as np
 import sapien
 import torch
+import random
 
 from mani_skill.agents.robots import Fetch, Panda
 from mani_skill.envs.sapien_env import BaseEnv
@@ -61,15 +62,21 @@ class PickDuplicatedEnv(BaseEnv):
         )
         self.table_scene.build()
 
-        self.items = []
-        self.number_of_objects = 6
+        self.target = self._load_mesh(
+                            name=f"target",
+                            filename="/home/ryo/Dataset/ycb_conveni/conveni/java_curry_chukara/textured.obj",
+                            pose=[0, -0.25, 0],
+                        )
 
-        for i in range(self.number_of_objects):
-            self.items.append(
+        self.obstacles = []
+        self.number_of_obstacles = 5
+
+        for i in range(self.number_of_obstacles):
+            self.obstacles.append(
                 self._load_mesh(
-                    name=f"java_curry_chukara{i:03d}",
+                    name=f"object{i:03d}",
                     filename="/home/ryo/Dataset/ycb_conveni/conveni/java_curry_chukara/textured.obj",
-                    pose=[0, -0.25 + i * 0.1, 0],
+                    pose=[0, -0.25 + (1 + i) * 0.1, 0],
                 )
             )
 
@@ -89,28 +96,29 @@ class PickDuplicatedEnv(BaseEnv):
         # builder.add_visual_from_file(filename="/home/ryo/Dataset/ycb_conveni/ycb/010_potted_meat_can/google_16k/textured.obj")
 
     def _initialize_episode(self, env_idx: torch.Tensor, options: dict):
-        n_active_objects = np.clip(np.random.poisson(4), 2, self.number_of_objects)
-        self.target = self.items[np.random.randint(n_active_objects)]
+        n_active_obstacles = np.clip(np.random.poisson(3), 1, self.number_of_obstacles)
+        active_objects = [self.target] + self.obstacles[:n_active_obstacles]
+        active_objects = random.sample(active_objects, len(active_objects))  # permute active_objects
 
         with torch.device(self.device):
             b = len(env_idx)
 
             self.table_scene.initialize(env_idx)
 
-            for i in range(n_active_objects):
-                item = self.items[i]  # type: sapien.Actor
+            for i, o in enumerate(active_objects):
                 xyz = torch.zeros((b, 3))
                 xyz[:, 2] = 0.0
                 xy = torch.rand(b, 2) * torch.tensor([0.03, 0.0]) \
-                    + torch.tensor([0.015, (-(n_active_objects - 1) / 2 + i) * 0.1])
+                    + torch.tensor([0.015, (-(n_active_obstacles - 1) / 2 + i) * 0.1])
                 xyz[:, :2] = xy
-                item.set_pose(Pose.create_from_pq(p=xyz.clone()))
+                o.set_pose(Pose.create_from_pq(p=xyz.clone()))
+                print(f"Setting pose for object [{i}] {o.name}, xyz: {xyz[env_idx].cpu().numpy()}")
 
-            for j in range(n_active_objects, self.number_of_objects):
-                item = self.items[j]  # type: sapien.Actor
+            for j in range(n_active_obstacles, self.number_of_obstacles):
+                item = self.obstacles[j]  # type: sapien.Actor
                 item.set_pose(
                     Pose.create_from_pq(
-                        p=torch.tensor([[0.0, -1.0, 0.04 * (j - n_active_objects)]]).repeat(b, 1)
+                        p=torch.tensor([[0.0, -1.0, 0.04 * (j - n_active_obstacles)]]).repeat(b, 1)
                     )
                 )
 
