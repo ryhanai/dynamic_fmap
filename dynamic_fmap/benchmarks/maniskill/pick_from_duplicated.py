@@ -4,6 +4,7 @@ import numpy as np
 import sapien
 import torch
 import random
+from pathlib import Path
 
 from mani_skill.agents.robots import Fetch, Panda
 from mani_skill.envs.sapien_env import BaseEnv
@@ -64,7 +65,7 @@ class PickDuplicatedEnv(BaseEnv):
 
         self.target = self._load_mesh(
                             name=f"target",
-                            filename="/home/ryo/Dataset/ycb_conveni/conveni/java_curry_chukara/textured.obj",
+                            filename=str(Path("~").expanduser() / "Dataset/ycb_conveni/conveni/java_curry_chukara/textured.obj"),
                             pose=[0, -0.25, 0],
                         )
 
@@ -75,7 +76,7 @@ class PickDuplicatedEnv(BaseEnv):
             self.obstacles.append(
                 self._load_mesh(
                     name=f"object{i:03d}",
-                    filename="/home/ryo/Dataset/ycb_conveni/conveni/java_curry_chukara/textured.obj",
+                    filename=str(Path("~").expanduser() / "Dataset/ycb_conveni/conveni/java_curry_chukara/textured.obj"),
                     pose=[0, -0.25 + (1 + i) * 0.1, 0],
                 )
             )
